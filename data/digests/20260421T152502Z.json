@@ -1,0 +1,82 @@
+{
+  "snapshot_id": "20260421T152502Z",
+  "model": "qwen3.5:9b",
+  "india_points": [
+    {
+      "point": "My goal is to make Tamil Nadu a model state in South Asia, says T.N. CM Stalin",
+      "sources": [
+        "India Latest News: Top National Headlines Today & Breaking News | The Hindu"
+      ]
+    },
+    {
+      "point": "Candidates wrap up last-minute efforts to woo voters as campaigning draws to a close in northern districts of T.N.",
+      "sources": [
+        "India Latest News: Top National Headlines Today & Breaking News | The Hindu"
+      ]
+    },
+    {
+      "point": "Sri Venkateshwara temple to come up near Suvarna Soudha in Belagavi",
+      "sources": [
+        "India Latest News: Top National Headlines Today & Breaking News | The Hindu"
+      ]
+    },
+    {
+      "point": "Bandi Sanjay accuses Revanth Reddy of trying to shield tainted BRS leaders in \u2018Kaleshwaram project scam\u2019",
+      "sources": [
+        "India Latest News: Top National Headlines Today & Breaking News | The Hindu"
+      ]
+    },
+    {
+      "point": "Man loses over \u20b972 lakh in share trading scam",
+      "sources": [
+        "India Latest News: Top National Headlines Today & Breaking News | The Hindu"
+      ]
+    },
+    {
+      "point": "Minister enquires about services, facilities at Machilipatnam GGH during surprise visit",
+      "sources": [
+        "India Latest News: Top National Headlines Today & Breaking News | The Hindu"
+      ]
+    }
+  ],
+  "world_points": [
+    {
+      "point": "Israeli soldiers punished over vandalism of Jesus statue in Lebanon",
+      "sources": [
+        "BBC News"
+      ]
+    },
+    {
+      "point": "Video: US forces board sanctioned tanker in Asia Pacific",
+      "sources": [
+        "Al Jazeera \u2013 Breaking News, World News and Video from Al Jazeera"
+      ]
+    },
+    {
+      "point": "Trump says he opposes extending Iran ceasefire amid talks uncertainty",
+      "sources": [
+        "Al Jazeera \u2013 Breaking News, World News and Video from Al Jazeera"
+      ]
+    },
+    {
+      "point": "Canadian killed in shooting at Mexico's ancient Teotihuac\u00e1n pyramids",
+      "sources": [
+        "BBC News"
+      ]
+    },
+    {
+      "point": "Why is the EU under pressure to suspend its trade agreement with Israel?",
+      "sources": [
+        "Al Jazeera \u2013 Breaking News, World News and Video from Al Jazeera"
+      ]
+    },
+    {
+      "point": "Role of US officials killed in crash in Mexico under scrutiny",
+      "sources": [
+        "BBC News"
+      ]
+    }
+  ],
+  "total_input_items": 50,
+  "total_ranked_items": 50
+}

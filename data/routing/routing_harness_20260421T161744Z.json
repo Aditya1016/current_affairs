@@ -1,0 +1,45 @@
+{
+  "generated_at": "2026-04-21T16:17:44.757518+00:00",
+  "prompt_count": 5,
+  "specialist_counts": {
+    "Friday Dev Cycle": 1,
+    "Friday Hook Guardian": 1,
+    "Friday PR Reviewer": 2,
+    "Friday Graph Intelligence": 1,
+    "Friday CLI UX Designer": 1
+  },
+  "routed": [
+    {
+      "prompt": "set up pre-commit hooks and fix lint failures",
+      "selected_specialists": [
+        "Friday Hook Guardian"
+      ]
+    },
+    {
+      "prompt": "review this PR risks and write release notes",
+      "selected_specialists": [
+        "Friday PR Reviewer"
+      ]
+    },
+    {
+      "prompt": "graph has too few clusters tune similarity threshold",
+      "selected_specialists": [
+        "Friday Graph Intelligence"
+      ]
+    },
+    {
+      "prompt": "improve CLI dashboard and command discoverability",
+      "selected_specialists": [
+        "Friday CLI UX Designer",
+        "Friday PR Reviewer"
+      ]
+    },
+    {
+      "prompt": "run full dev cycle and ship after checks",
+      "selected_specialists": [
+        "Friday Dev Cycle"
+      ]
+    }
+  ],
+  "output_file": "data\\routing\\routing_harness_20260421T161744Z.json"
+}

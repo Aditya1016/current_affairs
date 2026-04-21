@@ -1,0 +1,154 @@
+{
+  "snapshot_id": "20260421T153647Z",
+  "model": "qwen3.5:9b",
+  "india_points": [
+    {
+      "point": "Tamil Nadu election 2026: CPI(M), BJP face-off in Gandharvakottai constituency",
+      "sources": [
+        "India Latest News: Top National Headlines Today & Breaking News | The Hindu"
+      ]
+    },
+    {
+      "point": "Tamil Nadu election 2026: Auto nagar, IT park prominent demands in Tiruchengode constituency",
+      "sources": [
+        "India Latest News: Top National Headlines Today & Breaking News | The Hindu"
+      ]
+    },
+    {
+      "point": "Estimating changes in parliamentary seats before delimitation violates principles, says Ugrappa",
+      "sources": [
+        "India Latest News: Top National Headlines Today & Breaking News | The Hindu"
+      ]
+    },
+    {
+      "point": "Bandi Sanjay accuses Revanth Reddy of trying to shield tainted BRS leaders in \u2018Kaleshwaram project scam\u2019",
+      "sources": [
+        "India Latest News: Top National Headlines Today & Breaking News | The Hindu"
+      ]
+    },
+    {
+      "point": "VACB busts \u2018soil mafia\u2019 nexus in Statewide crackdown; 14 officials apprehended for graft",
+      "sources": [
+        "India Latest News: Top National Headlines Today & Breaking News | The Hindu"
+      ]
+    },
+    {
+      "point": "APSRTC bus skids off narrow road in Markapuram district",
+      "sources": [
+        "India Latest News: Top National Headlines Today & Breaking News | The Hindu"
+      ]
+    },
+    {
+      "point": "Satish Jarkiholi does not rule out withdrawal of party minority wing leader\u2019s suspension",
+      "sources": [
+        "India Latest News: Top National Headlines Today & Breaking News | The Hindu"
+      ]
+    },
+    {
+      "point": "PM announces relief for Thrissur fireworks blast victims",
+      "sources": [
+        "India Latest News: Top National Headlines Today & Breaking News | The Hindu"
+      ]
+    },
+    {
+      "point": "87-year-old man killed in lightning strike in Idukki",
+      "sources": [
+        "India Latest News: Top National Headlines Today & Breaking News | The Hindu"
+      ]
+    },
+    {
+      "point": "BJP seeks wider probe into Kaleshwaram project",
+      "sources": [
+        "India Latest News: Top National Headlines Today & Breaking News | The Hindu"
+      ]
+    },
+    {
+      "point": "Rajasthan refinery fire to have no material impact on financials: HPCL",
+      "sources": [
+        "India Latest News: Top National Headlines Today & Breaking News | The Hindu"
+      ]
+    },
+    {
+      "point": "Namma 112: Hoysala police rescue three in separate emergencies",
+      "sources": [
+        "India Latest News: Top National Headlines Today & Breaking News | The Hindu"
+      ]
+    }
+  ],
+  "world_points": [
+    {
+      "point": "Israeli soldiers punished over vandalism of Jesus statue in Lebanon",
+      "sources": [
+        "BBC News"
+      ]
+    },
+    {
+      "point": "Mass trial for 486 alleged MS-13 gang members begins in El Salvador",
+      "sources": [
+        "BBC News"
+      ]
+    },
+    {
+      "point": "Video: US forces board sanctioned tanker in Asia Pacific",
+      "sources": [
+        "Al Jazeera \u2013 Breaking News, World News and Video from Al Jazeera"
+      ]
+    },
+    {
+      "point": "Trump says he opposes extending Iran ceasefire amid talks uncertainty",
+      "sources": [
+        "Al Jazeera \u2013 Breaking News, World News and Video from Al Jazeera"
+      ]
+    },
+    {
+      "point": "Canadian killed in shooting at Mexico's ancient Teotihuac\u00e1n pyramids",
+      "sources": [
+        "BBC News"
+      ]
+    },
+    {
+      "point": "Why is the EU under pressure to suspend its trade agreement with Israel?",
+      "sources": [
+        "Al Jazeera \u2013 Breaking News, World News and Video from Al Jazeera"
+      ]
+    },
+    {
+      "point": "Role of US officials killed in crash in Mexico under scrutiny",
+      "sources": [
+        "BBC News"
+      ]
+    },
+    {
+      "point": "Mass trial for nearly 500 alleged gang members in El Salvador",
+      "sources": [
+        "Al Jazeera \u2013 Breaking News, World News and Video from Al Jazeera"
+      ]
+    },
+    {
+      "point": "Nigeria charges six people with \u2018terrorism\u2019, treason over 2025 coup plot",
+      "sources": [
+        "Al Jazeera \u2013 Breaking News, World News and Video from Al Jazeera"
+      ]
+    },
+    {
+      "point": "Iran\u2019s World Cup participation depends on team\u2019s safety in the US: Minister",
+      "sources": [
+        "Al Jazeera \u2013 Breaking News, World News and Video from Al Jazeera"
+      ]
+    },
+    {
+      "point": "Israeli soldiers and settlers kill 11 Palestinians across Gaza, West Bank",
+      "sources": [
+        "Al Jazeera \u2013 Breaking News, World News and Video from Al Jazeera"
+      ]
+    },
+    {
+      "point": "Ofcom investigating Telegram over child sexual abuse material concerns",
+      "sources": [
+        "BBC News"
+      ]
+    }
+  ],
+  "total_input_items": 100,
+  "total_ranked_items": 99
+}
