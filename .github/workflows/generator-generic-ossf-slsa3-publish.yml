@@ -3,8 +3,8 @@
 # separate terms of service, privacy policy, and support
 # documentation.
 
-# This workflow lets you generate SLSA provenance file for your project.
-# The generation satisfies level 3 for the provenance requirements - see https://slsa.dev/spec/v0.1/requirements
+# This workflow lets you generate a SLSA provenance file for your project.
+# The generated provenance satisfies level 3 of the provenance requirements - see https://slsa.dev/spec/v0.1/requirements
 # The project is an initiative of the OpenSSF (openssf.org) and is developed at
 # https://github.com/slsa-framework/slsa-github-generator.
 # The provenance file can be verified using https://github.com/slsa-framework/slsa-verifier.
