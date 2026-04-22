@@ -197,7 +197,7 @@ def _render_metrics_summary(result: dict) -> None:
     console.print(table)
 
 
-def run_cli() -> None:
+def run_cli() -> None:  # noqa: C901
     ui = load_ui_config()
     _render_banner(ui)
     console.print("Type 'help' for commands. Type 'exit' to quit.")
@@ -272,7 +272,9 @@ def run_cli() -> None:
                     FetchRequest(limit_per_source=limit, include_newsapi=not rss_only)
                 )
                 console.print(
-                    f"Fetched {response.total_fetched} items. Snapshot: {response.snapshot_id}. Sources: {response.source_breakdown}"
+                    f"Fetched {response.total_fetched} items. "
+                    f"Snapshot: {response.snapshot_id}. "
+                    f"Sources: {response.source_breakdown}"
                 )
             elif cmd == "digest":
                 snapshot_id = _parse_arg(args, "--snapshot", "")

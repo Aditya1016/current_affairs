@@ -123,7 +123,9 @@ def fetch_rss(rss_feeds: List[str], limit_per_source: int) -> List[NewsItem]:
     return all_items
 
 
-def fetch_all_news(limit_per_source: int, include_newsapi: bool, rss_feeds: List[str]) -> Tuple[List[NewsItem], Dict[str, int]]:
+def fetch_all_news(
+    limit_per_source: int, include_newsapi: bool, rss_feeds: List[str]
+) -> Tuple[List[NewsItem], Dict[str, int]]:
     items: List[NewsItem] = []
     source_breakdown: Dict[str, int] = {}
 
