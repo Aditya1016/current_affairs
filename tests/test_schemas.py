@@ -10,6 +10,9 @@ from app.schemas import (
     FetchRequest,
     FetchResponse,
     NewsItem,
+    WordPackResponse,
+    StorySearchResponse,
+    WordOfDayResponse,
 )
 
 
@@ -154,3 +157,67 @@ class TestBenchmarkRequest:
     def test_custom_models(self):
         req = BenchmarkRequest(snapshot_id="snap-1", models=["a", "b"])
         assert req.models == ["a", "b"]
+
+
+# ---------------------------------------------------------------------------
+# StorySearchResponse
+# ---------------------------------------------------------------------------
+
+class TestStorySearchResponse:
+    def test_construction(self):
+        resp = StorySearchResponse(
+            query="india economy",
+            limit=20,
+            category="india",
+            source="",
+            days=7,
+            total=1,
+            results=[
+                {
+                    "id": 1,
+                    "url": "https://example.com/1",
+                    "title": "India inflation eases",
+                    "snippet": "RBI commentary and CPI updates",
+                    "source": "Example News",
+                    "category": "india",
+                    "published_at": "2026-05-01T00:00:00+00:00",
+                    "last_seen_snapshot": "20260501T000000Z",
+                    "rank": 0.15,
+                }
+            ],
+        )
+        assert resp.total == 1
+        assert resp.results[0].title == "India inflation eases"
+
+
+class TestWordOfDayResponse:
+    def test_default_difficulty(self):
+        resp = WordOfDayResponse(
+            snapshot_id="20260501T000000Z",
+            word="interdiction",
+            context_headline="Navy expands coastal interdiction operations",
+            relevance_note="Picked from headlines",
+            definition="The act of preventing prohibited movement.",
+        )
+        assert resp.difficulty == "balanced"
+
+
+class TestWordPackResponse:
+    def test_construction(self):
+        item = WordOfDayResponse(
+            snapshot_id="20260501T000000Z",
+            word="interdiction",
+            context_headline="Navy expands coastal interdiction operations",
+            relevance_note="Picked from headlines",
+            definition="Preventing prohibited movement.",
+            difficulty="exam",
+        )
+        pack = WordPackResponse(
+            snapshot_id="20260501T000000Z",
+            difficulty="exam",
+            no_repeat_days=14,
+            count=1,
+            items=[item],
+        )
+        assert pack.count == 1
+        assert pack.items[0].word == "interdiction"

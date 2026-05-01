@@ -49,6 +49,28 @@ class PipelineResponse(BaseModel):
     digest: DigestResponse
 
 
+class StorySearchResult(BaseModel):
+    id: int
+    url: str
+    title: str
+    snippet: str = ""
+    source: str = ""
+    category: str = "world"
+    published_at: str = ""
+    last_seen_snapshot: str = ""
+    rank: float = 0.0
+
+
+class StorySearchResponse(BaseModel):
+    query: str
+    limit: int
+    category: str = ""
+    source: str = ""
+    days: int = 0
+    total: int
+    results: List[StorySearchResult]
+
+
 class BenchmarkRequest(BaseModel):
     snapshot_id: str
     models: List[str] = Field(
@@ -67,3 +89,20 @@ class BenchmarkResponse(BaseModel):
     snapshot_id: str
     generated_at: str
     results: List[Dict[str, object]]
+
+
+class WordOfDayResponse(BaseModel):
+    snapshot_id: str
+    word: str
+    context_headline: str
+    relevance_note: str
+    definition: str
+    difficulty: str = "balanced"
+
+
+class WordPackResponse(BaseModel):
+    snapshot_id: str
+    difficulty: str = "balanced"
+    no_repeat_days: int = 14
+    count: int
+    items: List[WordOfDayResponse]

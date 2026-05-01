@@ -10,9 +10,16 @@ from .schemas import (
     FetchRequest,
     FetchResponse,
     PipelineResponse,
+    StorySearchResponse,
+    WordPackResponse,
+    WordOfDayResponse,
 )
 from .service import fetch_news_service, generate_digest_service, run_pipeline_service
 from .service import get_metrics_summary_service
+from .service import get_metrics_trend_service
+from .service import search_stories_service
+from .service import word_pack_service
+from .service import word_of_day_service
 
 app = FastAPI(title="Current Affairs Backend", version="0.1.0")
 
@@ -66,3 +73,55 @@ def benchmark_models(request: BenchmarkRequest) -> BenchmarkResponse:
 @app.get("/metrics/summary")
 def metrics_summary(snapshot_id: str = "", limit: int = 50) -> dict:
     return get_metrics_summary_service(snapshot_id=snapshot_id, limit=limit)
+
+
+@app.get("/metrics/trend")
+def metrics_trend(phase: str = "", snapshot_id: str = "", limit: int = 30) -> dict:
+    return get_metrics_trend_service(phase=phase, snapshot_id=snapshot_id, limit=limit)
+
+
+@app.get("/word/today", response_model=WordOfDayResponse)
+def word_today(limit_per_source: int = 25, difficulty: str = "balanced", no_repeat_days: int = 14) -> WordOfDayResponse:
+    try:
+        return word_of_day_service(
+            limit_per_source=limit_per_source,
+            difficulty=difficulty,
+            no_repeat_days=no_repeat_days,
+        )
+    except RuntimeError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.get("/word/pack", response_model=WordPackResponse)
+def word_pack(
+    limit_per_source: int = 25,
+    difficulty: str = "balanced",
+    count: int = 5,
+    no_repeat_days: int = 14,
+) -> WordPackResponse:
+    try:
+        return word_pack_service(
+            limit_per_source=limit_per_source,
+            difficulty=difficulty,
+            count=count,
+            no_repeat_days=no_repeat_days,
+        )
+    except RuntimeError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.get("/stories/search", response_model=StorySearchResponse)
+def search_stories(
+    q: str = "",
+    limit: int = 20,
+    category: str = "",
+    source: str = "",
+    days: int = 0,
+) -> StorySearchResponse:
+    return search_stories_service(
+        query=q,
+        limit=limit,
+        category=category,
+        source=source,
+        days=days,
+    )

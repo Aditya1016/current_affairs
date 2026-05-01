@@ -103,3 +103,90 @@ class TestStorage:
         assert len(sid) == 16
         assert sid.endswith("Z")
         assert "T" in sid
+
+    def test_snapshot_items_are_searchable(self, tmp_path):
+        s = _make_storage(tmp_path)
+        sid = s.save_raw(
+            {
+                "items": [
+                    {
+                        "title": "India semiconductor mission gets funding boost",
+                        "source": "Example Source",
+                        "url": "https://news.example.com/semiconductor",
+                        "snippet": "Cabinet cleared additional incentives for chip manufacturing.",
+                        "published_at": "2026-05-01T08:00:00+00:00",
+                        "category": "india",
+                    }
+                ]
+            }
+        )
+        assert sid
+
+        rows = s.search_stories(query="semiconductor", limit=10)
+        assert len(rows) == 1
+        assert rows[0]["category"] == "india"
+        assert rows[0]["last_seen_snapshot"] == sid
+
+    def test_story_search_filters(self, tmp_path):
+        s = _make_storage(tmp_path)
+        s.save_raw(
+            {
+                "items": [
+                    {
+                        "title": "India signs green corridor pact",
+                        "source": "Source A",
+                        "url": "https://news.example.com/a",
+                        "snippet": "Energy and logistics collaboration.",
+                        "published_at": "2026-05-01T08:00:00+00:00",
+                        "category": "india",
+                    },
+                    {
+                        "title": "Global markets react to Fed signal",
+                        "source": "Source B",
+                        "url": "https://news.example.com/b",
+                        "snippet": "World equities moved after policy comments.",
+                        "published_at": "2026-05-01T09:00:00+00:00",
+                        "category": "world",
+                    },
+                ]
+            }
+        )
+
+        india_only = s.search_stories(query="", category="india", limit=10)
+        assert len(india_only) == 1
+        assert india_only[0]["title"].startswith("India signs")
+
+    def test_save_and_get_recent_vocab_words(self, tmp_path):
+        s = _make_storage(tmp_path)
+        s.save_vocab_word(
+            word="interdiction",
+            snapshot_id="20260501T000000Z",
+            difficulty="exam",
+            context_headline="Navy expands coastal interdiction posture",
+        )
+        words = s.get_recent_vocab_words(days=14)
+        assert "interdiction" in words
+
+    def test_recent_vocab_words_are_distinct(self, tmp_path):
+        s = _make_storage(tmp_path)
+        s.save_vocab_word("maritime", "20260501T000000Z", "balanced", "Headline A")
+        s.save_vocab_word("maritime", "20260501T010000Z", "balanced", "Headline B")
+        words = s.get_recent_vocab_words(days=14)
+        assert words.count("maritime") == 1
+
+    def test_phase_metrics_trend_returns_chronological_points(self, tmp_path):
+        s = _make_storage(tmp_path)
+        s.save_phase_metric(phase="fetch.sources", duration_ms=40.0, snapshot_id="snap-A")
+        s.save_phase_metric(phase="fetch.sources", duration_ms=70.0, snapshot_id="snap-A")
+        trend = s.get_phase_metrics_trend(phase="fetch.sources", limit=10)
+        assert trend["count"] == 2
+        assert len(trend["points"]) == 2
+        assert trend["points"][0]["created_at"] <= trend["points"][1]["created_at"]
+
+    def test_phase_metrics_trend_filters_by_snapshot(self, tmp_path):
+        s = _make_storage(tmp_path)
+        s.save_phase_metric(phase="digest.total", duration_ms=90.0, snapshot_id="snap-A")
+        s.save_phase_metric(phase="digest.total", duration_ms=110.0, snapshot_id="snap-B")
+        trend = s.get_phase_metrics_trend(phase="digest.total", snapshot_id="snap-A", limit=10)
+        assert trend["count"] == 1
+        assert trend["points"][0]["snapshot_id"] == "snap-A"
