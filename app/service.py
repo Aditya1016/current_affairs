@@ -317,6 +317,52 @@ def search_stories_service(
     )
 
 
+def _score_word_token(token: str, doc_freq: int, corpus_freq: int, resolved_difficulty: str, min_len: int) -> float:
+    if resolved_difficulty == "easy":
+        preferred_len_penalty = 0.25 * abs(len(token) - 8)
+        familiarity_bonus = 1.2 if corpus_freq in {1, 2} else 0.4
+        return (2.0 if doc_freq <= 2 else 0.8) + familiarity_bonus - preferred_len_penalty
+
+    rarity_bonus = 3.4 if doc_freq == 1 else (1.7 if doc_freq == 2 else 0.5)
+    corpus_penalty = 0.7 * max(corpus_freq - 2, 0)
+    length_score = 0.35 * min(max(len(token) - min_len, 0), 8)
+    suffix_penalty = 0.0
+    if token.endswith(("tion", "ment", "sion", "ality", "ness")):
+        suffix_penalty = 1.0 if resolved_difficulty == "exam" else 0.7
+    return rarity_bonus + length_score - corpus_penalty - suffix_penalty
+
+
+def _collect_word_tokens(
+    india_items: List[NewsItem],
+    min_len: int,
+    max_len: int,
+    max_freq: int,
+    banned: set,
+) -> Tuple[Counter, Counter, Dict[str, List[str]]]:
+    token_to_headlines: Dict[str, List[str]] = defaultdict(list)
+    token_counts: Counter = Counter()
+    token_global_counts: Counter = Counter()
+
+    for item in india_items:
+        text = f"{item.title} {item.snippet}".lower()
+        token_global_counts.update(re.findall(rf"[a-z]{{{min_len},{max_len}}}", text))
+
+    for item in india_items:
+        text = f"{item.title} {item.snippet}".lower()
+        unique_tokens = set(re.findall(rf"[a-z]{{{min_len},{max_len}}}", text))
+        for token in unique_tokens:
+            if token in WORD_STOPWORDS or token in COMMON_CURRENT_AFFAIRS_WORDS:
+                continue
+            if token in banned or token.isdigit():
+                continue
+            if len(re.findall(rf"\b{re.escape(token)}\b", text)) > max_freq:
+                continue
+            token_counts[token] += 1
+            token_to_headlines[token].append(item.title)
+
+    return token_counts, token_global_counts, token_to_headlines
+
+
 def _select_word_candidate(
     india_items: List[NewsItem],
     difficulty: str = "balanced",
@@ -329,54 +375,21 @@ def _select_word_candidate(
     max_freq = int(profile["max_freq"])
     banned = {w.strip().lower() for w in (exclude_words or set()) if w.strip()}
 
-    token_to_headlines: Dict[str, List[str]] = defaultdict(list)
-    token_counts: Counter = Counter()
-    token_global_counts: Counter = Counter()
-
-    for item in india_items:
-        text = f"{item.title} {item.snippet}".lower()
-        token_global_counts.update(re.findall(rf"[a-z]{{{min_len},{max_len}}}", text))
-
-    for item in india_items:
-        text = f"{item.title} {item.snippet}".lower()
-        tokens = re.findall(rf"[a-z]{{{min_len},{max_len}}}", text)
-        unique_tokens = set(tokens)
-        for token in unique_tokens:
-            if token in WORD_STOPWORDS:
-                continue
-            if token in COMMON_CURRENT_AFFAIRS_WORDS:
-                continue
-            if token in banned:
-                continue
-            if token.isdigit():
-                continue
-            token_count = len(re.findall(rf"\b{re.escape(token)}\b", text))
-            if token_count > max_freq:
-                continue
-            token_counts[token] += 1
-            token_to_headlines[token].append(item.title)
+    token_counts, token_global_counts, token_to_headlines = _collect_word_tokens(
+        india_items, min_len, max_len, max_freq, banned
+    )
 
     if not token_counts:
         fallback = india_items[0].title.split()[0] if india_items else "policy"
         headline = india_items[0].title if india_items else "No India headline found"
         return fallback.lower(), headline, "Selected fallback term due to low lexical diversity in source set."
 
-    def _score_token(token: str, doc_freq: int) -> float:
+    def _score(kv: Tuple[str, int]) -> Tuple[float, int]:
+        token, doc_freq = kv
         corpus_freq = int(token_global_counts.get(token, 0))
-        if resolved_difficulty == "easy":
-            preferred_len_penalty = 0.25 * abs(len(token) - 8)
-            familiarity_bonus = 1.2 if corpus_freq in {1, 2} else 0.4
-            return (2.0 if doc_freq <= 2 else 0.8) + familiarity_bonus - preferred_len_penalty
+        return _score_word_token(token, doc_freq, corpus_freq, resolved_difficulty, min_len), len(token)
 
-        rarity_bonus = 3.4 if doc_freq == 1 else (1.7 if doc_freq == 2 else 0.5)
-        corpus_penalty = 0.7 * max(corpus_freq - 2, 0)
-        length_score = 0.35 * min(max(len(token) - min_len, 0), 8)
-        suffix_penalty = 0.0
-        if token.endswith(("tion", "ment", "sion", "ality", "ness")):
-            suffix_penalty = 1.0 if resolved_difficulty == "exam" else 0.7
-        return rarity_bonus + length_score - corpus_penalty - suffix_penalty
-
-    ranked = sorted(token_counts.items(), key=lambda kv: (_score_token(kv[0], kv[1]), len(kv[0])), reverse=True)
+    ranked = sorted(token_counts.items(), key=_score, reverse=True)
     word = ranked[0][0]
     headline = token_to_headlines[word][0]
     note = (

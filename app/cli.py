@@ -6,7 +6,6 @@ from rich.panel import Panel
 from rich.table import Table
 
 from .benchmark import run_model_benchmark
-from .config import settings
 from .graph_view import build_relationship_graph
 from .route_harness import run_route_harness
 from .schemas import DigestRequest, FetchRequest
