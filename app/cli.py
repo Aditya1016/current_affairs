@@ -464,13 +464,21 @@ def _render_metrics_summary(metrics: dict) -> None:
     table.add_column("Calls", justify="right")
     table.add_column("Total (ms)", justify="right")
     table.add_column("Avg (ms)", justify="right")
+    table.add_column("Max (ms)", justify="right")
 
     for phase_data in metrics.get("phases", []):
         phase = phase_data.get("phase", "unknown")
-        calls = phase_data.get("call_count", 0)
+        calls = phase_data.get("samples", phase_data.get("call_count", 0))
         total_ms = phase_data.get("total_ms", 0.0)
-        avg_ms = total_ms / calls if calls > 0 else 0
-        table.add_row(str(phase), str(calls), f"{total_ms:.2f}", f"{avg_ms:.2f}")
+        avg_ms = phase_data.get("avg_ms", total_ms / calls if calls > 0 else 0.0)
+        max_ms = phase_data.get("max_ms", 0.0)
+        table.add_row(
+            str(phase),
+            str(calls),
+            f"{total_ms:.2f}",
+            f"{avg_ms:.2f}",
+            f"{max_ms:.2f}",
+        )
 
     console.print(table)
 
