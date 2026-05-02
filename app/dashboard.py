@@ -220,7 +220,7 @@ def generate_dashboard_html(  # noqa: C901
         </div>
 
         <footer>
-            Generated at {now} | <a href="/api/docs">API Docs</a>
+            Generated at {now} | <a href="/docs">API Docs</a>
         </footer>
     </div>
 </body>
