@@ -21,7 +21,7 @@ def _extract_entities(text: str) -> List[str]:
     return [p for p in phrases if len(p.split()) <= 3 and len(p) > 3]
 
 
-def detect_trending_topics(
+def detect_trending_topics(  # noqa: C901
     days: int = 7, min_occurrences: int = 3, limit: int = 10
 ) -> List[Dict[str, object]]:
     """Detect trending topics from recent snapshots.
@@ -39,11 +39,14 @@ def detect_trending_topics(
 
     topic_counter: Counter = Counter()
     topic_stories: Dict[str, List[NewsItem]] = defaultdict(list)
+    # Track how many snapshots each topic appears in (for accurate percentage)
+    topic_snapshot_count: Counter = Counter()
 
+    filtered_count = 0
     for snapshot_data in snapshots:
         if not snapshot_data.get("items"):
             continue
-        snap_time = snapshot_data.get("created_at")
+        snap_time = snapshot_data.get("generated_at")
         if snap_time:
             try:
                 snap_dt = datetime.fromisoformat(snap_time.replace('Z', '+00:00')).astimezone(IST)
@@ -52,6 +55,8 @@ def detect_trending_topics(
             except Exception:
                 pass
 
+        filtered_count += 1
+        snapshot_topics: set = set()
         for item_data in snapshot_data["items"]:
             # Extract topics from title and snippet
             title_entities = _extract_entities(item_data.get("title", ""))
@@ -60,6 +65,7 @@ def detect_trending_topics(
 
             for entity in all_entities:
                 topic_counter[entity] += 1
+                snapshot_topics.add(entity)
                 if len(topic_stories[entity]) < 5:  # keep up to 5 samples
                     topic_stories[entity].append(
                         NewsItem(
@@ -72,12 +78,15 @@ def detect_trending_topics(
                         )
                     )
 
-    # Filter and rank
+        for topic in snapshot_topics:
+            topic_snapshot_count[topic] += 1
+
+    # Filter and rank — percentage = fraction of snapshots containing the topic
     trending = [
         {
             "topic": topic,
             "frequency": count,
-            "percentage": round(100 * count / max(len(snapshots), 1), 1),
+            "percentage": round(100 * topic_snapshot_count[topic] / max(filtered_count, 1), 1),
             "sample_stories": [
                 {
                     "title": s.title,
@@ -108,7 +117,7 @@ def get_trending_by_category(  # noqa: C901
     for snapshot_data in snapshots:
         if not snapshot_data.get("items"):
             continue
-        snap_time = snapshot_data.get("created_at")
+        snap_time = snapshot_data.get("generated_at")
         if snap_time:
             try:
                 snap_dt = datetime.fromisoformat(snap_time.replace('Z', '+00:00')).astimezone(IST)
