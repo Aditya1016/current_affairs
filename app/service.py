@@ -1,6 +1,7 @@
 from collections import Counter, defaultdict
 from datetime import datetime, timedelta, timezone
 import json
+import logging
 import re
 from time import perf_counter
 from typing import Dict, List, Optional, Set, Tuple
@@ -27,6 +28,7 @@ from .summarizer import summarize_section
 
 
 IST = timezone(timedelta(hours=5, minutes=30))
+_log = logging.getLogger(__name__)
 WORD_STOPWORDS = {
     "about",
     "after",
@@ -114,6 +116,10 @@ WORD_DIFFICULTY_PROFILES: Dict[str, Dict[str, float]] = {
 }
 
 
+class WordNotFoundError(RuntimeError):
+    """Raised when no today India headlines are available for word selection."""
+
+
 def _normalize_word_difficulty(value: str) -> str:
     normalized = (value or "balanced").strip().lower()
     return normalized if normalized in WORD_DIFFICULTY_PROFILES else "balanced"
@@ -123,11 +129,11 @@ def _elapsed_ms(start: float) -> float:
     return (perf_counter() - start) * 1000.0
 
 
-def _parse_iso_dt(value: str) -> datetime:
+def _parse_iso_dt(value: str) -> Optional[datetime]:
     try:
         return datetime.fromisoformat((value or "").replace("Z", "+00:00")).astimezone(IST)
     except Exception:
-        return datetime.now(IST)
+        return None
 
 
 def _filter_today_india_items(items: List[NewsItem]) -> List[NewsItem]:
@@ -136,7 +142,8 @@ def _filter_today_india_items(items: List[NewsItem]) -> List[NewsItem]:
     for item in items:
         if item.category != "india":
             continue
-        if _parse_iso_dt(item.published_at or "").date() != today_ist:
+        dt = _parse_iso_dt(item.published_at or "")
+        if dt is None or dt.date() != today_ist:
             continue
         out.append(item)
     return out
@@ -317,6 +324,52 @@ def search_stories_service(
     )
 
 
+def _score_word_token(token: str, doc_freq: int, corpus_freq: int, resolved_difficulty: str, min_len: int) -> float:
+    if resolved_difficulty == "easy":
+        preferred_len_penalty = 0.25 * abs(len(token) - 8)
+        familiarity_bonus = 1.2 if corpus_freq in {1, 2} else 0.4
+        return (2.0 if doc_freq <= 2 else 0.8) + familiarity_bonus - preferred_len_penalty
+
+    rarity_bonus = 3.4 if doc_freq == 1 else (1.7 if doc_freq == 2 else 0.5)
+    corpus_penalty = 0.7 * max(corpus_freq - 2, 0)
+    length_score = 0.35 * min(max(len(token) - min_len, 0), 8)
+    suffix_penalty = 0.0
+    if token.endswith(("tion", "ment", "sion", "ality", "ness")):
+        suffix_penalty = 1.0 if resolved_difficulty == "exam" else 0.7
+    return rarity_bonus + length_score - corpus_penalty - suffix_penalty
+
+
+def _collect_word_tokens(
+    india_items: List[NewsItem],
+    min_len: int,
+    max_len: int,
+    max_freq: int,
+    banned: set,
+) -> Tuple[Counter, Counter, Dict[str, List[str]]]:
+    token_to_headlines: Dict[str, List[str]] = defaultdict(list)
+    token_counts: Counter = Counter()
+    token_global_counts: Counter = Counter()
+
+    for item in india_items:
+        text = f"{item.title} {item.snippet}".lower()
+        token_global_counts.update(re.findall(rf"[a-z]{{{min_len},{max_len}}}", text))
+
+    for item in india_items:
+        text = f"{item.title} {item.snippet}".lower()
+        unique_tokens = set(re.findall(rf"[a-z]{{{min_len},{max_len}}}", text))
+        for token in unique_tokens:
+            if token in WORD_STOPWORDS or token in COMMON_CURRENT_AFFAIRS_WORDS:
+                continue
+            if token in banned or token.isdigit():
+                continue
+            if len(re.findall(rf"\b{re.escape(token)}\b", text)) > max_freq:
+                continue
+            token_counts[token] += 1
+            token_to_headlines[token].append(item.title)
+
+    return token_counts, token_global_counts, token_to_headlines
+
+
 def _select_word_candidate(
     india_items: List[NewsItem],
     difficulty: str = "balanced",
@@ -329,54 +382,21 @@ def _select_word_candidate(
     max_freq = int(profile["max_freq"])
     banned = {w.strip().lower() for w in (exclude_words or set()) if w.strip()}
 
-    token_to_headlines: Dict[str, List[str]] = defaultdict(list)
-    token_counts: Counter = Counter()
-    token_global_counts: Counter = Counter()
-
-    for item in india_items:
-        text = f"{item.title} {item.snippet}".lower()
-        token_global_counts.update(re.findall(rf"[a-z]{{{min_len},{max_len}}}", text))
-
-    for item in india_items:
-        text = f"{item.title} {item.snippet}".lower()
-        tokens = re.findall(rf"[a-z]{{{min_len},{max_len}}}", text)
-        unique_tokens = set(tokens)
-        for token in unique_tokens:
-            if token in WORD_STOPWORDS:
-                continue
-            if token in COMMON_CURRENT_AFFAIRS_WORDS:
-                continue
-            if token in banned:
-                continue
-            if token.isdigit():
-                continue
-            token_count = len(re.findall(rf"\b{re.escape(token)}\b", text))
-            if token_count > max_freq:
-                continue
-            token_counts[token] += 1
-            token_to_headlines[token].append(item.title)
+    token_counts, token_global_counts, token_to_headlines = _collect_word_tokens(
+        india_items, min_len, max_len, max_freq, banned
+    )
 
     if not token_counts:
         fallback = india_items[0].title.split()[0] if india_items else "policy"
         headline = india_items[0].title if india_items else "No India headline found"
         return fallback.lower(), headline, "Selected fallback term due to low lexical diversity in source set."
 
-    def _score_token(token: str, doc_freq: int) -> float:
+    def _score(kv: Tuple[str, int]) -> Tuple[float, int]:
+        token, doc_freq = kv
         corpus_freq = int(token_global_counts.get(token, 0))
-        if resolved_difficulty == "easy":
-            preferred_len_penalty = 0.25 * abs(len(token) - 8)
-            familiarity_bonus = 1.2 if corpus_freq in {1, 2} else 0.4
-            return (2.0 if doc_freq <= 2 else 0.8) + familiarity_bonus - preferred_len_penalty
+        return _score_word_token(token, doc_freq, corpus_freq, resolved_difficulty, min_len), len(token)
 
-        rarity_bonus = 3.4 if doc_freq == 1 else (1.7 if doc_freq == 2 else 0.5)
-        corpus_penalty = 0.7 * max(corpus_freq - 2, 0)
-        length_score = 0.35 * min(max(len(token) - min_len, 0), 8)
-        suffix_penalty = 0.0
-        if token.endswith(("tion", "ment", "sion", "ality", "ness")):
-            suffix_penalty = 1.0 if resolved_difficulty == "exam" else 0.7
-        return rarity_bonus + length_score - corpus_penalty - suffix_penalty
-
-    ranked = sorted(token_counts.items(), key=lambda kv: (_score_token(kv[0], kv[1]), len(kv[0])), reverse=True)
+    ranked = sorted(token_counts.items(), key=_score, reverse=True)
     word = ranked[0][0]
     headline = token_to_headlines[word][0]
     note = (
@@ -453,8 +473,13 @@ def _model_pick_word(
         candidate = str(data.get("word", "")).strip().lower()
         if _is_valid_word_candidate(candidate, india_items, resolved_difficulty, banned):
             return candidate
-    except Exception:
-        pass
+    except Exception as exc:
+        _log.debug(
+            "Ollama word-pick failed (url=%s model=%s): %s",
+            settings.ollama_base_url,
+            settings.ollama_model,
+            exc,
+        )
     return ""
 
 
@@ -574,7 +599,7 @@ def word_of_day_service(
             snapshot_id=fetch_result.snapshot_id,
             meta={"today_india_items": 0},
         )
-        raise RuntimeError("No India headlines from today were found. Try again shortly.")
+        raise WordNotFoundError("No India headlines from today were found. Try again shortly.")
 
     recent_words = set(storage.get_recent_vocab_words(days=bounded_no_repeat_days)) if bounded_no_repeat_days > 0 else set()
     result = _pick_word_entry(
@@ -624,7 +649,7 @@ def word_pack_service(
     items = [NewsItem(**item) for item in snapshot_data.get("items", [])]
     today_india_items = _filter_today_india_items(items)
     if not today_india_items:
-        raise RuntimeError("No India headlines from today were found. Try again shortly.")
+        raise WordNotFoundError("No India headlines from today were found. Try again shortly.")
 
     recent_words = set(storage.get_recent_vocab_words(days=bounded_no_repeat_days)) if bounded_no_repeat_days > 0 else set()
     chosen: List[WordOfDayResponse] = []

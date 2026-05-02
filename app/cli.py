@@ -6,7 +6,6 @@ from rich.panel import Panel
 from rich.table import Table
 
 from .benchmark import run_model_benchmark
-from .config import settings
 from .graph_view import build_relationship_graph
 from .route_harness import run_route_harness
 from .schemas import DigestRequest, FetchRequest
@@ -266,7 +265,7 @@ def _render_plotext_series(title: str, values: List[float], y_label: str) -> Non
         return
     try:
         import plotext as plt  # type: ignore
-    except Exception:
+    except ImportError:
         console.print("plotext is not installed. Install requirements to enable --plot charts.")
         return
 
@@ -282,19 +281,19 @@ def _render_plotext_series(title: str, values: List[float], y_label: str) -> Non
         console.print(f"Could not render plot chart: {exc}")
 
 
-def _render_plotext_bar(title: str, labels: List[str], values: List[float], y_label: str) -> None:
+def _render_plotext_bar(title: str, labels: List[str], values: List[float], y_label: str, x_label: str = "Category") -> None:
     if not labels or not values:
         return
     try:
         import plotext as plt  # type: ignore
-    except Exception:
+    except ImportError:
         console.print("plotext is not installed. Install requirements to enable --plot charts.")
         return
 
     try:
         plt.clf()
         plt.title(title)
-        plt.xlabel("Category")
+        plt.xlabel(x_label)
         plt.ylabel(y_label)
         plt.bar(labels, values)
         plt.show()
@@ -321,6 +320,7 @@ def _render_benchmark_plot(report: dict, mode: str = "both") -> None:
             labels=models,
             values=scores,
             y_label="Score",
+            x_label="Model",
         )
 
     if selected_mode in {"latency", "both"}:
@@ -329,6 +329,7 @@ def _render_benchmark_plot(report: dict, mode: str = "both") -> None:
             labels=models,
             values=latencies,
             y_label="Latency ms",
+            x_label="Model",
         )
 
 
@@ -352,6 +353,7 @@ def _render_search_distribution_plot(result: dict, plot_by: str = "source") -> N
         labels=labels,
         values=values,
         y_label="Stories",
+        x_label=selected.title(),
     )
 
 

@@ -1,7 +1,15 @@
 """Tests for word-of-day helper behavior in app/service.py."""
 
+from datetime import datetime, timedelta, timezone
+
 from app.schemas import NewsItem
-from app.service import _generate_quick_definition, _normalize_word_difficulty, _select_word_candidate
+from app.service import (
+    _generate_quick_definition,
+    _normalize_word_difficulty,
+    _select_word_candidate,
+    _parse_iso_dt,
+    _filter_today_india_items,
+)
 
 
 def _item(title: str, snippet: str = "") -> NewsItem:
@@ -87,3 +95,48 @@ class TestDefinitionFallback:
         )
         assert text
         assert "unavailable" not in text.lower()
+
+
+class TestParseIsoDt:
+    def test_valid_utc_timestamp_is_parsed(self):
+        dt = _parse_iso_dt("2026-05-01T08:00:00Z")
+        assert dt is not None
+        assert dt.year == 2026
+
+    def test_invalid_timestamp_returns_none(self):
+        assert _parse_iso_dt("not-a-date") is None
+
+    def test_empty_string_returns_none(self):
+        assert _parse_iso_dt("") is None
+
+
+class TestFilterTodayIndiaItems:
+    _IST = timezone(timedelta(hours=5, minutes=30))
+
+    def _make_item(self, published_at: str, category: str = "india") -> NewsItem:
+        return NewsItem(
+            title="Test headline",
+            source="TestSource",
+            url="https://example.com/test",
+            snippet="",
+            category=category,
+            published_at=published_at,
+        )
+
+    def test_excludes_items_with_invalid_published_at(self):
+        item = self._make_item("bad-timestamp")
+        assert _filter_today_india_items([item]) == []
+
+    def test_excludes_items_with_missing_published_at(self):
+        item = self._make_item("")
+        assert _filter_today_india_items([item]) == []
+
+    def test_excludes_non_india_items(self):
+        today_utc = datetime.now(self._IST).strftime("%Y-%m-%dT%H:%M:%S+05:30")
+        item = self._make_item(today_utc, category="world")
+        assert _filter_today_india_items([item]) == []
+
+    def test_includes_todays_india_item(self):
+        today_ist_str = datetime.now(self._IST).strftime("%Y-%m-%dT%H:%M:%S+05:30")
+        item = self._make_item(today_ist_str, category="india")
+        assert _filter_today_india_items([item]) == [item]
