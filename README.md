@@ -47,7 +47,7 @@ You can run this project in two modes:
    or directly:
 
    ```powershell
-   .\.venv\bin\python.exe -m app.cli
+   .\.venv\Scripts\python.exe -m app.cli
    ```
 
 ## Terminal Chatbot Commands

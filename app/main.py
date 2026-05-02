@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 
 from .config import settings
 from .benchmark import run_model_benchmark
@@ -20,6 +20,7 @@ from .service import get_metrics_trend_service
 from .service import search_stories_service
 from .service import word_pack_service
 from .service import word_of_day_service
+from .service import WordNotFoundError
 
 app = FastAPI(title="Current Affairs Backend", version="0.1.0")
 
@@ -81,23 +82,29 @@ def metrics_trend(phase: str = "", snapshot_id: str = "", limit: int = 30) -> di
 
 
 @app.get("/word/today", response_model=WordOfDayResponse)
-def word_today(limit_per_source: int = 25, difficulty: str = "balanced", no_repeat_days: int = 14) -> WordOfDayResponse:
+def word_today(
+    limit_per_source: int = Query(default=25, ge=5, le=100),
+    difficulty: str = "balanced",
+    no_repeat_days: int = Query(default=14, ge=0, le=365),
+) -> WordOfDayResponse:
     try:
         return word_of_day_service(
             limit_per_source=limit_per_source,
             difficulty=difficulty,
             no_repeat_days=no_repeat_days,
         )
-    except RuntimeError as exc:
+    except WordNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
 @app.get("/word/pack", response_model=WordPackResponse)
 def word_pack(
-    limit_per_source: int = 25,
+    limit_per_source: int = Query(default=25, ge=5, le=100),
     difficulty: str = "balanced",
-    count: int = 5,
-    no_repeat_days: int = 14,
+    count: int = Query(default=5, ge=1, le=10),
+    no_repeat_days: int = Query(default=14, ge=0, le=365),
 ) -> WordPackResponse:
     try:
         return word_pack_service(
@@ -106,8 +113,10 @@ def word_pack(
             count=count,
             no_repeat_days=no_repeat_days,
         )
-    except RuntimeError as exc:
+    except WordNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
 @app.get("/stories/search", response_model=StorySearchResponse)

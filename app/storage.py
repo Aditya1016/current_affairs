@@ -237,7 +237,7 @@ class Storage:
         bounded_limit = max(1, min(limit, 100))
         fts_query = self._fts_query(query)
         category_val = category.strip().lower()
-        source_val = source.strip()
+        source_val = source.strip().lower()
 
         where_clauses: List[str] = []
         params: List[Any] = []
@@ -245,7 +245,7 @@ class Storage:
             where_clauses.append("LOWER(s.category) = ?")
             params.append(category_val)
         if source_val:
-            where_clauses.append("s.source = ?")
+            where_clauses.append("LOWER(s.source) = ?")
             params.append(source_val)
         if days > 0:
             where_clauses.append("datetime(s.published_at) >= datetime('now', ?)")

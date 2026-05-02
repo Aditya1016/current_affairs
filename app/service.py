@@ -1,6 +1,7 @@
 from collections import Counter, defaultdict
 from datetime import datetime, timedelta, timezone
 import json
+import logging
 import re
 from time import perf_counter
 from typing import Dict, List, Optional, Set, Tuple
@@ -27,6 +28,7 @@ from .summarizer import summarize_section
 
 
 IST = timezone(timedelta(hours=5, minutes=30))
+_log = logging.getLogger(__name__)
 WORD_STOPWORDS = {
     "about",
     "after",
@@ -112,6 +114,10 @@ WORD_DIFFICULTY_PROFILES: Dict[str, Dict[str, float]] = {
         "max_freq": 1,
     },
 }
+
+
+class WordNotFoundError(RuntimeError):
+    """Raised when no today India headlines are available for word selection."""
 
 
 def _normalize_word_difficulty(value: str) -> str:
@@ -467,8 +473,13 @@ def _model_pick_word(
         candidate = str(data.get("word", "")).strip().lower()
         if _is_valid_word_candidate(candidate, india_items, resolved_difficulty, banned):
             return candidate
-    except Exception:
-        pass
+    except Exception as exc:
+        _log.debug(
+            "Ollama word-pick failed (url=%s model=%s): %s",
+            settings.ollama_base_url,
+            settings.ollama_model,
+            exc,
+        )
     return ""
 
 
@@ -588,7 +599,7 @@ def word_of_day_service(
             snapshot_id=fetch_result.snapshot_id,
             meta={"today_india_items": 0},
         )
-        raise RuntimeError("No India headlines from today were found. Try again shortly.")
+        raise WordNotFoundError("No India headlines from today were found. Try again shortly.")
 
     recent_words = set(storage.get_recent_vocab_words(days=bounded_no_repeat_days)) if bounded_no_repeat_days > 0 else set()
     result = _pick_word_entry(
@@ -638,7 +649,7 @@ def word_pack_service(
     items = [NewsItem(**item) for item in snapshot_data.get("items", [])]
     today_india_items = _filter_today_india_items(items)
     if not today_india_items:
-        raise RuntimeError("No India headlines from today were found. Try again shortly.")
+        raise WordNotFoundError("No India headlines from today were found. Try again shortly.")
 
     recent_words = set(storage.get_recent_vocab_words(days=bounded_no_repeat_days)) if bounded_no_repeat_days > 0 else set()
     chosen: List[WordOfDayResponse] = []
