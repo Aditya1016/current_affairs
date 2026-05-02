@@ -49,7 +49,7 @@ Analysis reports and efficiency evaluations.
 
 | Document | Purpose |
 |----------|---------|
-| [agent-efficiency-report.md](./reports/agent-efficiency-report.md) | Agent performance and efficiency analysis |
+| [agent-efficiency-report.md](./agent-efficiency-report.md) | Agent performance and efficiency analysis |
 
 **👉 START HERE** if you want to review performance metrics and agent analysis.
 
