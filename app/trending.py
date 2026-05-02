@@ -172,7 +172,7 @@ def get_trending_by_category(  # noqa: C901
         {
             "topic": topic,
             "frequency": count,
-            "percentage": round(100 * topic_snapshot_count[topic] / max(filtered_count, 1), 1),
+            "percentage": min(100.0, round(100 * topic_snapshot_count[topic] / max(filtered_count, 1), 1)),
             "category": category,
             "sample_stories": [
                 {

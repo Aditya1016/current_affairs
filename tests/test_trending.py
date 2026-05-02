@@ -201,11 +201,12 @@ class TestGetTrendingByCategory:
         assert results == []
 
     def test_snapshot_without_timestamp_skipped(self):
-        snap_no_ts = {"items": [_item("No Time India", category="india")]}
+        snap_no_ts = {"items": [_item("No Timestamp India", category="india")]}
         snap_with_ts = _make_snapshot([_item("Supreme Court India", category="india")], days_ago=1)
         with self._patch_storage([snap_no_ts, snap_with_ts]):
             results = get_trending_by_category(category="india", days=7, limit=10)
 
         topics = [r["topic"] for r in results]
-        # Items from the timestampless snapshot should not appear
-        assert not any("Time" in t for t in topics)
+        # Items from snap_with_ts should appear; items from the timestampless snapshot should not
+        assert any("Supreme" in t or "Court" in t for t in topics)
+        assert not any("Timestamp" in t for t in topics)

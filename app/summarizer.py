@@ -55,13 +55,11 @@ def _normalize_length(point: str, target_max: int = 140) -> str:
     """Truncate point to target length if needed, respecting word boundaries."""
     if len(point) <= target_max:
         return point
-    # Leave room for the appended period
+    # Slice to target_max-1 to leave room for the appended period
     truncated = point[:target_max - 1].rsplit(' ', 1)[0]
     result = truncated.rstrip('.,;:') + '.'
-    # Final clamp: ensure we never exceed target_max
-    if len(result) > target_max:
-        result = result[:target_max - 1].rstrip('.,;: ') + '.'
-    return result
+    # Hard clamp: guarantee the contract is always met
+    return result[:target_max]
 
 
 def _extract_first_json(text: str) -> str:  # noqa: C901

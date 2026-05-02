@@ -521,10 +521,10 @@ class Storage:
         snapshots = []
         for row in rows:
             try:
-                payload = json.loads(row[0])
+                payload = json.loads(row["payload_json"])
                 # Inject the DB-level timestamp so callers can time-filter reliably
                 if "created_at" not in payload:
-                    payload["created_at"] = row[1]
+                    payload["created_at"] = row["created_at"]
                 snapshots.append(payload)
             except (json.JSONDecodeError, TypeError):
                 continue
