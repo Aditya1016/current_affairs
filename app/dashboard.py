@@ -1,5 +1,6 @@
 """Simple web dashboard for current affairs digest and trending topics."""
 
+import html as html_lib
 from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional, Union
 
@@ -25,8 +26,9 @@ def generate_dashboard_html(  # noqa: C901
         india_points = digest.get("india_points", [])
         india_html = '<div class="section"><h2>🇮🇳 India</h2><ul class="points">'
         for point in india_points:
-            sources = ", ".join(point.get("sources", []))
-            india_html += f'<li><strong>{point.get("point")}</strong> <span class="source">({sources})</span></li>'
+            sources = html_lib.escape(", ".join(point.get("sources", [])))
+            pt = html_lib.escape(str(point.get("point", "")))
+            india_html += f'<li><strong>{pt}</strong> <span class="source">({sources})</span></li>'
         india_html += "</ul></div>"
 
     # Build World digest section
@@ -35,8 +37,9 @@ def generate_dashboard_html(  # noqa: C901
         world_points = digest.get("world_points", [])
         world_html = '<div class="section"><h2>🌍 World</h2><ul class="points">'
         for point in world_points:
-            sources = ", ".join(point.get("sources", []))
-            world_html += f'<li><strong>{point.get("point")}</strong> <span class="source">({sources})</span></li>'
+            sources = html_lib.escape(", ".join(point.get("sources", [])))
+            pt = html_lib.escape(str(point.get("point", "")))
+            world_html += f'<li><strong>{pt}</strong> <span class="source">({sources})</span></li>'
         world_html += "</ul></div>"
 
     # Build trending section
@@ -47,15 +50,15 @@ def generate_dashboard_html(  # noqa: C901
         if trending_india:
             trending_html += '<div class="trending-column"><h3>India Trending</h3><ul>'
             for topic_data in trending_india[:5]:
-                topic = topic_data.get("topic", "N/A")
-                freq = topic_data.get("frequency", 0)
+                topic = html_lib.escape(str(topic_data.get("topic", "N/A")))
+                freq = int(topic_data.get("frequency", 0))
                 trending_html += f'<li>{topic} <span class="frequency">×{freq}</span></li>'
             trending_html += '</ul></div>'
 
         if trending:
             trending_html += '<div class="trending-column"><h3>All Topics</h3><ul>'
             for topic_data in trending[:5]:
-                topic = topic_data.get("topic", "N/A")
+                topic = html_lib.escape(str(topic_data.get("topic", "N/A")))
                 pct = topic_data.get("percentage", 0)
                 trending_html += f'<li>{topic} <span class="percentage">{pct}%</span></li>'
             trending_html += '</ul></div>'
@@ -237,13 +240,15 @@ def generate_search_results_html(search_results: Dict) -> str:
 
     results_html = ""
     for result in results[:50]:
-        title = result.get("title", "N/A")
-        source = result.get("source", "N/A")
-        category = result.get("category", "world")
-        url = result.get("url", "#")
+        title = html_lib.escape(result.get("title", "N/A"))
+        source = html_lib.escape(result.get("source", "N/A"))
+        category = html_lib.escape(result.get("category", "world"))
+        raw_url = result.get("url", "#")
+        # Only allow http/https URLs to prevent javascript: XSS
+        safe_url = html_lib.escape(raw_url) if raw_url.startswith(("http://", "https://")) else "#"
         results_html += f"""
         <div class="result-item">
-            <h3><a href="{url}" target="_blank">{title}</a></h3>
+            <h3><a href="{safe_url}" target="_blank">{title}</a></h3>
             <p class="meta">
                 <span class="source">{source}</span>
                 <span class="category">{category}</span>
@@ -251,13 +256,14 @@ def generate_search_results_html(search_results: Dict) -> str:
         </div>
         """
 
+    escaped_query = html_lib.escape(str(query))
     html = f"""
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Search: {query} - Friday</title>
+    <title>Search: {escaped_query} - Friday</title>
     <style>
         * {{
             margin: 0;
@@ -323,7 +329,7 @@ def generate_search_results_html(search_results: Dict) -> str:
 <body>
     <div class="header">
         <h1>Search Results</h1>
-        <p>Query: <strong>{query}</strong> | Total: {total}</p>
+        <p>Query: <strong>{escaped_query}</strong> | Total: {total}</p>
     </div>
     <div class="container">
         {results_html if results_html else '<p>No results found.</p>'}
