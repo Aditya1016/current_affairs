@@ -6,6 +6,7 @@ from rich.panel import Panel
 from rich.table import Table
 
 from .benchmark import run_model_benchmark
+from .config import settings
 from .graph_view import build_relationship_graph
 from .route_harness import run_route_harness
 from .schemas import DigestRequest, FetchRequest
@@ -23,39 +24,79 @@ from .service import (
     word_of_day_service,
 )
 from .ui_config import load_ui_config, save_ui_config
+from .trending import detect_trending_topics, get_trending_by_category
 
 
 HELP_TEXT = """
-Commands:
+╔════════════════════════════════════════════════════════════════════════════╗
+║                     📰 FRIDAY - Current Affairs CLI                        ║
+╚════════════════════════════════════════════════════════════════════════════╝
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  🔄 CORE COMMANDS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  fetch                             Fetch headlines from RSS + NewsAPI
+  pipeline                          Fetch + generate digest (in one step)
   help                              Show this help
-  fetch [--rss-only] [--limit N]    Fetch headlines and save snapshot
-  digest [--snapshot ID] [--model M] [--bullets N]
-                                    Generate digest from snapshot or latest
-    news today                        Fresh India-only digest for today
+  exit                              Quit CLI
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  📋 DIGEST & CONTENT
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  news today                        Fresh India-only digest for today
+  agenda                            Digest from latest snapshot
+  word today                        India-relevant vocabulary word of the day
+  word pack                         Pack of 5 unique vocabulary words
+
+  Usage:
+    fetch [--rss-only] [--limit N]
+    news today
     word today [--level easy|balanced|exam] [--no-repeat DAYS]
-                                    Fresh India-relevant uncommon word of the day
     word pack [--count N] [--level easy|balanced|exam] [--no-repeat DAYS]
-                                    Generate a unique vocabulary pack from today's India news
-    agenda                            Digest from latest snapshot
-  pipeline [--rss-only] [--limit N] Run fetch + digest in one step
-    search "QUERY" [--limit N] [--category india|world] [--source NAME] [--days N] [--plot] [--plot-by source|category]
-                                                                        Search indexed stories from past snapshots
-    benchmark --snapshot ID [--models "m1,m2"] [--bullets N] [--plot] [--plot-mode score|latency|both]
-                                                                        Run model comparison with optional terminal charts
-    graph [--snapshot ID] [--top N] [--min-sim F] [--no-adaptive]
-                                                                        Build related-news graph (Mermaid + JSON)
-    metrics [--snapshot ID] [--limit N] [--phase NAME] [--trend N] [--plot]
-                                                                        Show phase timing summary or time trend sparkline
-    route-test [--prompts "p1|p2|..."]
-                                                                        Run keyword routing harness and log output
-    logo                              Show FRIDAY logo file location
-  model [MODEL_NAME]                Show or set default model for this session
-  config show                       Show UI config
-  config set name VALUE             Set assistant prompt name
-  config set accent VALUE           Set prompt accent color (e.g. bright_cyan)
-  config set panel VALUE            Set dashboard panel color
-  config set tips true|false        Toggle tips panel visibility
-  exit                              Quit
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  🔍 SEARCH & ANALYSIS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  search <QUERY>                    Search indexed stories
+  trending                          Trending topics (all categories)
+  trending-india                    Trending topics in India news
+  trending-world                    Trending topics in World news
+  graph                             Build relationship graph (Mermaid)
+  metrics                           Show performance metrics
+  benchmark                         Compare model performance
+  route-test                        Test keyword routing logic
+
+  Usage:
+    search "politics india" [--limit 20] [--category india] [--days 7]
+    trending [--days 7] [--limit 10]
+    trending-india [--days 7]
+    graph [--snapshot ID] [--top 15]
+    metrics [--limit 50]
+    benchmark --snapshot <ID> [--models "model1,model2"]
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  ⚙️ CONFIGURATION
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  model [NAME]                      Set/show current AI model for digests
+  config show                       Show current UI settings
+  config set [KEY] [VALUE]          Change UI configuration
+  logo                              Show FRIDAY logo location
+
+  Usage:
+    model                            (shows current model: from .env or custom)
+    model mistral                    (switch to custom model)
+    config set name "My Assistant"  (change name)
+    config set accent bright_cyan   (change color theme)
+    config set panel purple         (change panel color)
+    config set tips true|false      (show/hide tips)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+💡 Quick Start:
+   1. fetch              (download headlines)
+   2. news today         (quick digest)
+   3. search "topic"     (find specific news)
+   4. trending           (what's hot)
 """.strip()
 
 
@@ -182,30 +223,6 @@ def _render_graph_summary(result: dict) -> None:
             if row:
                 preview_titles.append(row["title"])
         console.print(f"{idx}. size={len(cluster)} :: " + " | ".join(preview_titles))
-
-
-def _render_metrics_summary(result: dict) -> None:
-    table = Table(title="Pipeline Phase Timing Summary")
-    table.add_column("Phase")
-    table.add_column("Samples", justify="right")
-    table.add_column("Avg ms", justify="right")
-    table.add_column("Max ms", justify="right")
-    table.add_column("Total ms", justify="right")
-
-    for row in result.get("phases", []):
-        table.add_row(
-            str(row.get("phase", "")),
-            str(row.get("samples", 0)),
-            str(row.get("avg_ms", 0)),
-            str(row.get("max_ms", 0)),
-            str(row.get("total_ms", 0)),
-        )
-
-    if not result.get("phases"):
-        console.print("No metrics yet. Run fetch/digest/pipeline first.")
-        return
-
-    console.print(table)
 
 
 def _sparkline(values: List[float]) -> str:
@@ -411,6 +428,61 @@ def _render_word_pack(result: dict) -> None:
     )
 
 
+def _render_trending_topics(topics: List[dict]) -> None:
+    """Render trending topics as a formatted table."""
+    table = Table(title="Trending Topics")
+    table.add_column("Rank", justify="right")
+    table.add_column("Topic")
+    table.add_column("Frequency")
+    table.add_column("Top Stories")
+
+    for idx, topic_data in enumerate(topics, start=1):
+        topic = topic_data.get("topic", "N/A")
+        freq = topic_data.get("frequency", 0)
+        pct = topic_data.get("percentage", 0)
+        stories = topic_data.get("sample_stories", [])
+        story_titles = "; ".join([s.get("title", "")[:40] for s in stories[:2]])
+
+        table.add_row(
+            str(idx),
+            topic,
+            f"{freq} ({pct}%)",
+            story_titles,
+        )
+
+    if not topics:
+        console.print("No trending topics found.")
+        return
+
+    console.print(table)
+
+
+def _render_metrics_summary(metrics: dict) -> None:
+    """Render metrics summary as a formatted table."""
+    table = Table(title="Metrics Summary")
+    table.add_column("Phase", style="cyan")
+    table.add_column("Calls", justify="right")
+    table.add_column("Total (ms)", justify="right")
+    table.add_column("Avg (ms)", justify="right")
+    table.add_column("Max (ms)", justify="right")
+
+    for phase_data in metrics.get("phases", []):
+        phase = phase_data.get("phase", "unknown")
+        calls = phase_data.get("samples", phase_data.get("call_count", 0))
+        total_ms = phase_data.get("total_ms", 0.0)
+        avg_ms = phase_data.get("avg_ms", total_ms / calls if calls > 0 else 0.0)
+        max_ms = phase_data.get("max_ms", 0.0)
+        table.add_row(
+            str(phase),
+            str(calls),
+            f"{total_ms:.2f}",
+            f"{avg_ms:.2f}",
+            f"{max_ms:.2f}",
+        )
+
+    console.print(table)
+
+
 def run_cli() -> None:  # noqa: C901
     ui = load_ui_config()
     _render_banner(ui)
@@ -449,10 +521,17 @@ def run_cli() -> None:  # noqa: C901
         if lower.startswith("model"):
             parts = shlex.split(raw)
             if len(parts) == 1:
-                console.print(f"Session model: {session_model or 'default from .env'}")
+                current = session_model or settings.ollama_model
+                source = "custom (this session)" if session_model else "from .env (default)"
+                console.print("\n[bold cyan]Current Model[/]")
+                console.print(f"  Model: {current}")
+                console.print(f"  Source: {source}")
+                console.print("\n  Usage: [bold]model <model_name>[/] to switch models (e.g., model mistral)")
+                console.print("  Note: Changes apply to digests in this session only\n")
             else:
                 session_model = " ".join(parts[1:]).strip()
-                console.print(f"Session model set to: {session_model}")
+                console.print(f"[green]✓[/] Session model switched to: [bold]{session_model}[/]")
+                console.print("  (Affects: [dim]news today, digest, pipeline, agenda[/])")
             continue
 
         if lower in {"news today", "whats the news for today", "what's the news for today", "news", "today news"}:
@@ -540,6 +619,22 @@ def run_cli() -> None:  # noqa: C901
                 _render_story_search(search_payload)
                 if show_plot:
                     _render_search_distribution_plot(search_payload, plot_by=plot_by)
+            elif cmd in {"trending", "trending-india", "trending-world"}:
+                days = _parse_int_arg(args, "--days", 7)
+                limit = _parse_int_arg(args, "--limit", 10 if cmd == "trending" else 5)
+                min_occ = _parse_int_arg(args, "--min-occurrences", 3)
+
+                if cmd == "trending":
+                    topics = detect_trending_topics(days=days, min_occurrences=min_occ, limit=limit)
+                    console.print(f"\n[bold cyan]Trending Topics (Last {days} days)[/]")
+                elif cmd == "trending-india":
+                    topics = get_trending_by_category(category="india", days=days, limit=limit)
+                    console.print(f"\n[bold cyan]Trending in India (Last {days} days)[/]")
+                else:  # trending-world
+                    topics = get_trending_by_category(category="world", days=days, limit=limit)
+                    console.print(f"\n[bold cyan]Trending in World (Last {days} days)[/]")
+
+                _render_trending_topics(topics)
             elif cmd in {"word", "vocab"}:
                 level = _parse_arg(args, "--level", "balanced")
                 no_repeat_days = _parse_int_arg(args, "--no-repeat", 14)

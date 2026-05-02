@@ -1,5 +1,5 @@
 from app.summarizer import parse_model_response
-from app.schemas import NewsItem, DigestPoint
+from app.schemas import NewsItem
 
 
 def sample_items():

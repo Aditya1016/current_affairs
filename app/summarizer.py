@@ -1,7 +1,7 @@
 import ast
 import json
 import re
-from typing import List
+from typing import List, Set
 
 import requests
 
@@ -9,7 +9,60 @@ from .config import settings
 from .schemas import DigestPoint, NewsItem
 
 
-def _extract_first_json(text: str) -> str:
+def _tokenize(text: str) -> Set[str]:
+    """Tokenize text into lowercased words, removing stop-words and non-alphanumeric tokens."""
+    stop_words = {
+        "a", "an", "and", "are", "as", "at", "be", "by", "for", "from", "has", "he",
+        "in", "is", "it", "its", "of", "on", "or", "that", "the", "to", "was", "will",
+        "with", "this", "these", "which", "who", "what", "when", "where", "why", "how"
+    }
+    words = re.findall(r'\b\w+\b', text.lower())
+    return {w for w in words if w not in stop_words and len(w) >= 2}
+
+
+def _semantic_similarity(text_a: str, text_b: str, threshold: float = 0.6) -> bool:
+    """Check if two texts are semantically similar using Jaccard similarity on tokens.
+
+    Returns True if similarity >= threshold (meaning they are TOO similar / duplicates).
+    """
+    tokens_a = _tokenize(text_a)
+    tokens_b = _tokenize(text_b)
+    if not tokens_a or not tokens_b:
+        return False
+    intersection = len(tokens_a & tokens_b)
+    union = len(tokens_a | tokens_b)
+    if union == 0:
+        return False
+    similarity = intersection / union
+    return similarity >= threshold
+
+
+def _validate_extractive(point: str, source_text: str, min_coverage: float = 0.3) -> bool:
+    """Validate that a bullet point is grounded in source text.
+
+    Returns True if point is SUPPORTED by source (at least min_coverage% of point tokens appear in source).
+    """
+    point_tokens = _tokenize(point)
+    if not point_tokens:
+        return True  # empty or generic points pass (conservative)
+    source_tokens = _tokenize(source_text)
+    supported = len(point_tokens & source_tokens)
+    coverage = supported / len(point_tokens)
+    return coverage >= min_coverage
+
+
+def _normalize_length(point: str, target_max: int = 140) -> str:
+    """Truncate point to target length if needed, respecting word boundaries."""
+    if len(point) <= target_max:
+        return point
+    # Slice to target_max-1 to leave room for the appended period
+    truncated = point[:target_max - 1].rsplit(' ', 1)[0]
+    result = truncated.rstrip('.,;:') + '.'
+    # Hard clamp: guarantee the contract is always met
+    return result[:target_max]
+
+
+def _extract_first_json(text: str) -> str:  # noqa: C901
     """Extract the first balanced JSON array or object from text."""
     if not text:
         return ""
@@ -23,7 +76,7 @@ def _extract_first_json(text: str) -> str:
             elif text[i] == "]":
                 depth -= 1
                 if depth == 0:
-                    return text[start : i + 1]
+                    return text[start:i + 1]
     # fallback: try object
     start = text.find("{")
     if start != -1:
@@ -39,21 +92,53 @@ def _extract_first_json(text: str) -> str:
     return ""
 
 
-def _normalize_and_dedupe(points: List[DigestPoint], max_bullets: int) -> List[DigestPoint]:
-    seen = set()
+def _normalize_and_dedupe(points: List[DigestPoint], max_bullets: int, source_texts: List[str] = None) -> List[DigestPoint]:
+    """Deduplicate and validate points using exact/semantic similarity + extractive grounding.
+
+    Args:
+        points: list of candidate bullet points
+        max_bullets: maximum number to return
+        source_texts: optional list of source texts for extractive validation
+    """
+    seen_points = []
     out = []
+
     for p in points:
-        key = re.sub(r"\W+", " ", p.point.lower()).strip()
-        if not key or key in seen:
+        point_text = p.point.strip()
+        if not point_text:
             continue
-        seen.add(key)
-        out.append(p)
+
+        # Skip if exact duplicate (normalized)
+        normalized_key = re.sub(r"\W+", " ", point_text.lower()).strip()
+        if any(normalized_key == re.sub(r"\W+", " ", sp.lower()).strip() for sp in seen_points):
+            continue
+
+        # Skip if semantically similar to any existing point (threshold=0.65)
+        if any(_semantic_similarity(point_text, sp, threshold=0.65) for sp in seen_points):
+            continue
+
+        # Validate against source texts if provided: at least one source must provide 30%+ coverage
+        if source_texts:
+            grounded = any(
+                _validate_extractive(point_text, src, min_coverage=0.3)
+                for src in source_texts
+            )
+            if not grounded:
+                continue
+
+        # Normalize length
+        normalized_point = _normalize_length(point_text, target_max=140)
+
+        out.append(DigestPoint(point=normalized_point, sources=p.sources))
+        seen_points.append(point_text)
+
         if len(out) >= max_bullets:
             break
+
     return out
 
 
-def parse_model_response(text: str, items: List[NewsItem], max_bullets: int) -> List[DigestPoint]:
+def parse_model_response(text: str, items: List[NewsItem], max_bullets: int) -> List[DigestPoint]:  # noqa: C901
     """Robustly parse model-generated text into DigestPoint list.
 
     Attempts several strategies: direct json, extracting balanced JSON, ast.literal_eval for
@@ -99,7 +184,9 @@ def parse_model_response(text: str, items: List[NewsItem], max_bullets: int) -> 
             if point:
                 points.append(DigestPoint(point=point, sources=sources[:2]))
 
-    points = _normalize_and_dedupe(points, max_bullets)
+    # Combine source texts for extractive validation (include both title and snippet)
+    source_texts = [f"{item.title}. {item.snippet or ''}" for item in items]
+    points = _normalize_and_dedupe(points, max_bullets, source_texts=source_texts)
     if points:
         return points
     # final fallback

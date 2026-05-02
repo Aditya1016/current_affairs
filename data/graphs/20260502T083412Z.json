@@ -1,0 +1,115 @@
+{
+  "snapshot_id": "20260502T083412Z",
+  "top_n": 15,
+  "min_similarity": 0.44,
+  "used_similarity": 0.4,
+  "adaptive": true,
+  "node_count": 15,
+  "edge_count": 1,
+  "clusters": [
+    [
+      "N8",
+      "N10"
+    ]
+  ],
+  "nodes": [
+    {
+      "node_id": "N1",
+      "title": "Kalaburagi joins global \u2018City Nature Challenge\u2019 despite intense heatwave",
+      "source": "India Latest News: Top National Headlines Today & Breaking News | The Hindu",
+      "category": "india"
+    },
+    {
+      "node_id": "N2",
+      "title": "SCR seeks land at four locations in Telangana for mega coaching terminals",
+      "source": "India Latest News: Top National Headlines Today & Breaking News | The Hindu",
+      "category": "india"
+    },
+    {
+      "node_id": "N3",
+      "title": "Sringeri constituency: Verification of postal ballots, recount begin in Chikkamagaluru",
+      "source": "India Latest News: Top National Headlines Today & Breaking News | The Hindu",
+      "category": "india"
+    },
+    {
+      "node_id": "N4",
+      "title": "Hyderabadis receive test alert messages on May 2 as nationwide test rolls out",
+      "source": "India Latest News: Top National Headlines Today & Breaking News | The Hindu",
+      "category": "india"
+    },
+    {
+      "node_id": "N5",
+      "title": "Kerala Assembly elections: Counting arrangements in place for May 4",
+      "source": "India Latest News: Top National Headlines Today & Breaking News | The Hindu",
+      "category": "india"
+    },
+    {
+      "node_id": "N6",
+      "title": "What is Overseas Citizen of India card, how to apply for it?",
+      "source": "India Latest News: Top National Headlines Today & Breaking News | The Hindu",
+      "category": "india"
+    },
+    {
+      "node_id": "N7",
+      "title": "Enumerators begin housing census in Andhra Pradesh",
+      "source": "India Latest News: Top National Headlines Today & Breaking News | The Hindu",
+      "category": "india"
+    },
+    {
+      "node_id": "N8",
+      "title": "Alleging unauthorised sorting of postal ballot covers, TMC files complaint with ECI",
+      "source": "India Latest News: Top National Headlines Today & Breaking News | The Hindu",
+      "category": "india"
+    },
+    {
+      "node_id": "N9",
+      "title": "Accused in \u20b92,672-crore bank fraud case extradited from UAE, arrested by CBI",
+      "source": "India Latest News: Top National Headlines Today & Breaking News | The Hindu",
+      "category": "india"
+    },
+    {
+      "node_id": "N10",
+      "title": "Assembly elections 2026 LIVE: Supreme Court disposes TMC's petition; Alleging unauthorised sorting of postal ballot covers, TMC files complaint with ECI",
+      "source": "India Latest News: Top National Headlines Today & Breaking News | The Hindu",
+      "category": "india"
+    },
+    {
+      "node_id": "N11",
+      "title": "Government officers, whether Central or State, belong to ECI during poll time, says Supreme Court",
+      "source": "India Latest News: Top National Headlines Today & Breaking News | The Hindu",
+      "category": "india"
+    },
+    {
+      "node_id": "N12",
+      "title": "Punjab's first case under the anti-sacrilege law registered in Sri Muktsar Sahib",
+      "source": "India Latest News: Top National Headlines Today & Breaking News | The Hindu",
+      "category": "india"
+    },
+    {
+      "node_id": "N13",
+      "title": "Kerala polls: Tight security in place for vote counting day, says State Police Chief",
+      "source": "India Latest News: Top National Headlines Today & Breaking News | The Hindu",
+      "category": "india"
+    },
+    {
+      "node_id": "N14",
+      "title": "Apple says India antitrust body overstepping judicial authority as spat intensifies",
+      "source": "India Latest News: Top National Headlines Today & Breaking News | The Hindu",
+      "category": "india"
+    },
+    {
+      "node_id": "N15",
+      "title": "Karnataka government launches India\u2019s first digital grievance redressal system for gig workers",
+      "source": "India Latest News: Top National Headlines Today & Breaking News | The Hindu",
+      "category": "india"
+    }
+  ],
+  "edges": [
+    {
+      "left": "N8",
+      "right": "N10",
+      "weight": 0.572
+    }
+  ],
+  "mermaid_file": "data\\graphs\\20260502T083412Z.mmd"
+}

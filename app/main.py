@@ -1,7 +1,11 @@
+import logging
+
 from fastapi import FastAPI, HTTPException, Query
+from fastapi.responses import HTMLResponse
 
 from .config import settings
 from .benchmark import run_model_benchmark
+from .dashboard import generate_dashboard_html, generate_search_results_html
 from .schemas import (
     BenchmarkRequest,
     BenchmarkResponse,
@@ -21,7 +25,10 @@ from .service import search_stories_service
 from .service import word_pack_service
 from .service import word_of_day_service
 from .service import WordNotFoundError
+from .service import get_latest_digest_snapshot
+from .trending import detect_trending_topics, get_trending_by_category
 
+_log = logging.getLogger(__name__)
 app = FastAPI(title="Current Affairs Backend", version="0.1.0")
 
 
@@ -134,3 +141,77 @@ def search_stories(
         source=source,
         days=days,
     )
+
+
+@app.get("/trending/topics")
+def trending_topics(
+    days: int = Query(default=7, ge=1, le=90),
+    min_occurrences: int = Query(default=3, ge=1, le=20),
+    limit: int = Query(default=10, ge=1, le=50),
+) -> dict:
+    """Get trending topics across all stories in the last N days."""
+    return {
+        "trending": detect_trending_topics(
+            days=days,
+            min_occurrences=min_occurrences,
+            limit=limit,
+        )
+    }
+
+
+@app.get("/trending/by-category")
+def trending_by_category(
+    category: str = Query(default="india"),
+    days: int = Query(default=7, ge=1, le=90),
+    limit: int = Query(default=5, ge=1, le=20),
+) -> dict:
+    """Get trending topics for a specific category (india or world)."""
+    return {
+        "category": category,
+        "trending": get_trending_by_category(
+            category=category,
+            days=days,
+            limit=limit,
+        ),
+    }
+
+
+@app.get("/dashboard", response_class=HTMLResponse)
+def dashboard() -> str:
+    """Render the main dashboard with current digest and trending topics."""
+    try:
+        # Fetch latest digest if available
+        digest_data = get_latest_digest_snapshot()
+
+        # Fetch trending data
+        trending_india = get_trending_by_category(category="india", days=7, limit=5)
+        trending_all = detect_trending_topics(days=7, limit=5)
+
+        return generate_dashboard_html(
+            digest=digest_data,
+            trending=trending_all,
+            trending_india=trending_india,
+        )
+    except Exception:
+        _log.exception("Dashboard rendering failed; returning empty fallback")
+        # Fallback: empty dashboard
+        return generate_dashboard_html()
+
+
+@app.get("/dashboard/search", response_class=HTMLResponse)
+def dashboard_search(
+    q: str = "",
+    limit: int = 50,
+    category: str = "",
+    source: str = "",
+    days: int = 0,
+) -> str:
+    """Render search results as HTML."""
+    results = search_stories_service(
+        query=q,
+        limit=limit,
+        category=category,
+        source=source,
+        days=days,
+    )
+    return generate_search_results_html(results.dict())
