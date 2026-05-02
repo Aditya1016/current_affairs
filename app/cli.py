@@ -6,9 +6,8 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.live import Live
 from rich.text import Text
-from rich.progress import BarColumn, Progress, TextColumn
-from time import perf_counter
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from time import perf_counter, sleep
+from concurrent.futures import ThreadPoolExecutor
 
 from .benchmark import run_model_benchmark
 from .config import settings
@@ -122,7 +121,7 @@ def _get_phase_avg_ms(phase: str) -> float:
     return 0.0
 
 
-def _format_clock_panel(elapsed_s: float, expected_s: float) -> Panel:
+def _format_clock_panel(elapsed_s: float, expected_s: float, label: str = "Working") -> Panel:
     # color: green if < expected, orange if within 2x, red otherwise
     if expected_s <= 0:
         color = "yellow"
@@ -150,7 +149,7 @@ def _format_clock_panel(elapsed_s: float, expected_s: float) -> Panel:
     else:
         txt.append("Expected: N/A\n", style="dim")
 
-    return Panel(txt, title="Operation Timer", border_style=color)
+    return Panel(txt, title=label, border_style=color)
 
 
 def _call_with_loader(func, *args, phase: str = "", label: str = "Working", **kwargs):
@@ -163,14 +162,16 @@ def _call_with_loader(func, *args, phase: str = "", label: str = "Working", **kw
     future = _CLI_EXECUTOR.submit(func, *args, **kwargs)
 
     start = perf_counter()
-    with Live(_format_clock_panel(0.0, expected_s), refresh_per_second=8, console=console) as live:
+    with Live(_format_clock_panel(0.0, expected_s, label), refresh_per_second=8, console=console) as live:
         while not future.done():
             elapsed = perf_counter() - start
-            panel = _format_clock_panel(elapsed, expected_s)
+            panel = _format_clock_panel(elapsed, expected_s, label)
             live.update(panel)
+            sleep(0.05)
     # future done; get result or raise
     result = future.result()
     return result
+
 
 def _render_banner(ui: dict) -> None:
     panel_color = str(ui.get("panel_color", "cyan"))
@@ -743,7 +744,7 @@ def run_cli() -> None:  # noqa: C901
                         difficulty=level,
                         count=count,
                         no_repeat_days=no_repeat_days,
-                        phase="digest.total",
+                        phase="word_pack.total",
                         label="Generating word pack",
                     )
                     _render_word_pack(pack.dict())
@@ -758,7 +759,7 @@ def run_cli() -> None:  # noqa: C901
                     limit_per_source=25,
                     difficulty=level,
                     no_repeat_days=no_repeat_days,
-                    phase="digest.total",
+                    phase="word_of_day.total",
                     label="Generating word of the day",
                 )
                 txt = Text()

@@ -2,6 +2,7 @@ import logging
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import HTMLResponse
+from starlette.concurrency import run_in_threadpool
 
 from .config import settings
 from .benchmark import run_model_benchmark
@@ -43,10 +44,10 @@ async def record_request_timing(request, call_next):
     try:
         # use the path as phase label, normalize slashes -> dots
         path = request.url.path.strip("/") or "root"
-        phase = f"http.{path.replace('/', '.') }"
-        storage.save_phase_metric(phase=phase, duration_ms=elapsed_ms)
+        phase = f"http.{path.replace('/', '.')}"
+        await run_in_threadpool(storage.save_phase_metric, phase=phase, duration_ms=elapsed_ms)
     except Exception:
-        pass
+        _log.debug("Failed to record request timing for %s", request.url.path, exc_info=True)
     return response
 
 
