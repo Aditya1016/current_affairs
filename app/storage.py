@@ -505,5 +505,28 @@ class Storage:
             "points": rows_list,
         }
 
+    def get_recent_snapshots(self, limit: int = 100) -> List[Dict[str, Any]]:
+        """Get recent raw snapshots sorted by creation time (newest first)."""
+        bounded_limit = max(1, min(limit, 500))
+        with self._connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT payload_json FROM snapshots
+                ORDER BY created_at DESC
+                LIMIT ?
+                """,
+                (bounded_limit,),
+            ).fetchall()
+        
+        snapshots = []
+        for row in rows:
+            try:
+                payload = json.loads(row[0])
+                snapshots.append(payload)
+            except (json.JSONDecodeError, TypeError):
+                continue
+        
+        return snapshots
+
 
 storage = Storage()

@@ -787,3 +787,35 @@ def format_india_digest_text(response: DigestResponse) -> str:
     else:
         lines.append("No India items found for today.")
     return "\n".join(lines)
+
+
+def get_latest_digest_snapshot() -> DigestResponse:
+    """
+    Load the latest saved digest snapshot from storage.
+    Returns an empty DigestResponse if no digest is found.
+    """
+    try:
+        with storage._connect() as conn:
+            row = conn.execute(
+                """
+                SELECT payload_json FROM digests
+                ORDER BY created_at DESC
+                LIMIT 1
+                """
+            ).fetchone()
+        
+        if row:
+            payload = json.loads(row[0])
+            return DigestResponse(**payload)
+    except Exception as exc:
+        _log.debug("Failed to load latest digest: %s", exc)
+    
+    # Fallback: return empty digest
+    return DigestResponse(
+        snapshot_id="",
+        model="",
+        india_points=[],
+        world_points=[],
+        total_input_items=0,
+        total_ranked_items=0,
+    )

@@ -6,6 +6,7 @@ from rich.panel import Panel
 from rich.table import Table
 
 from .benchmark import run_model_benchmark
+from .config import settings
 from .graph_view import build_relationship_graph
 from .route_harness import run_route_harness
 from .schemas import DigestRequest, FetchRequest
@@ -27,40 +28,75 @@ from .trending import detect_trending_topics, get_trending_by_category
 
 
 HELP_TEXT = """
-Commands:
+╔════════════════════════════════════════════════════════════════════════════╗
+║                     📰 FRIDAY - Current Affairs CLI                        ║
+╚════════════════════════════════════════════════════════════════════════════╝
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  🔄 CORE COMMANDS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  fetch                             Fetch headlines from RSS + NewsAPI
+  pipeline                          Fetch + generate digest (in one step)
   help                              Show this help
-  fetch [--rss-only] [--limit N]    Fetch headlines and save snapshot
-  digest [--snapshot ID] [--model M] [--bullets N]
-                                    Generate digest from snapshot or latest
-    news today                        Fresh India-only digest for today
+  exit                              Quit CLI
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  📋 DIGEST & CONTENT
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  news today                        Fresh India-only digest for today
+  agenda                            Digest from latest snapshot
+  word today                        India-relevant vocabulary word of the day
+  word pack                         Pack of 5 unique vocabulary words
+
+  Usage:
+    fetch [--rss-only] [--limit N]
+    news today
     word today [--level easy|balanced|exam] [--no-repeat DAYS]
-                                    Fresh India-relevant uncommon word of the day
     word pack [--count N] [--level easy|balanced|exam] [--no-repeat DAYS]
-                                    Generate a unique vocabulary pack from today's India news
-    agenda                            Digest from latest snapshot
-  pipeline [--rss-only] [--limit N] Run fetch + digest in one step
-    search "QUERY" [--limit N] [--category india|world] [--source NAME] [--days N] [--plot] [--plot-by source|category]
-                                                                        Search indexed stories from past snapshots
-    trending [--days N] [--min-occurrences N] [--limit N]
-                                                                        Show trending topics across all categories
-    trending-india [--days N] [--limit N]                             Show trending topics in India news
-    trending-world [--days N] [--limit N]                             Show trending topics in World news
-    benchmark --snapshot ID [--models "m1,m2"] [--bullets N] [--plot] [--plot-mode score|latency|both]
-                                                                        Run model comparison with optional terminal charts
-    graph [--snapshot ID] [--top N] [--min-sim F] [--no-adaptive]
-                                                                        Build related-news graph (Mermaid + JSON)
-    metrics [--snapshot ID] [--limit N] [--phase NAME] [--trend N] [--plot]
-                                                                        Show phase timing summary or time trend sparkline
-    route-test [--prompts "p1|p2|..."]
-                                                                        Run keyword routing harness and log output
-    logo                              Show FRIDAY logo file location
-  model [MODEL_NAME]                Show or set default model for this session
-  config show                       Show UI config
-  config set name VALUE             Set assistant prompt name
-  config set accent VALUE           Set prompt accent color (e.g. bright_cyan)
-  config set panel VALUE            Set dashboard panel color
-  config set tips true|false        Toggle tips panel visibility
-  exit                              Quit
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  🔍 SEARCH & ANALYSIS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  search <QUERY>                    Search indexed stories
+  trending                          Trending topics (all categories)
+  trending-india                    Trending topics in India news
+  trending-world                    Trending topics in World news
+  graph                             Build relationship graph (Mermaid)
+  metrics                           Show performance metrics
+  benchmark                         Compare model performance
+  route-test                        Test keyword routing logic
+
+  Usage:
+    search "politics india" [--limit 20] [--category india] [--days 7]
+    trending [--days 7] [--limit 10]
+    trending-india [--days 7]
+    graph [--snapshot ID] [--top 15]
+    metrics [--limit 50]
+    benchmark --snapshot <ID> [--models "model1,model2"]
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  ⚙️ CONFIGURATION
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  model [NAME]                      Set/show current AI model for digests
+  config show                       Show current UI settings
+  config set [KEY] [VALUE]          Change UI configuration
+  logo                              Show FRIDAY logo location
+
+  Usage:
+    model                            (shows current model: from .env or custom)
+    model mistral                    (switch to custom model)
+    config set name "My Assistant"  (change name)
+    config set accent bright_cyan   (change color theme)
+    config set panel purple         (change panel color)
+    config set tips true|false      (show/hide tips)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+💡 Quick Start:
+   1. fetch              (download headlines)
+   2. news today         (quick digest)
+   3. search "topic"     (find specific news)
+   4. trending           (what's hot)
 """.strip()
 
 
@@ -501,10 +537,17 @@ def run_cli() -> None:  # noqa: C901
         if lower.startswith("model"):
             parts = shlex.split(raw)
             if len(parts) == 1:
-                console.print(f"Session model: {session_model or 'default from .env'}")
+                current = session_model or settings.ollama_model
+                source = "custom (this session)" if session_model else "from .env (default)"
+                console.print(f"\n[bold cyan]Current Model[/]")
+                console.print(f"  Model: {current}")
+                console.print(f"  Source: {source}")
+                console.print(f"\n  Usage: [bold]model <model_name>[/] to switch models (e.g., model mistral)")
+                console.print(f"  Note: Changes apply to digests in this session only\n")
             else:
                 session_model = " ".join(parts[1:]).strip()
-                console.print(f"Session model set to: {session_model}")
+                console.print(f"[green]✓[/] Session model switched to: [bold]{session_model}[/]")
+                console.print(f"  (Affects: [dim]news today, word today, word pack, agenda[/])")
             continue
 
         if lower in {"news today", "whats the news for today", "what's the news for today", "news", "today news"}:
