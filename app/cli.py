@@ -4,6 +4,11 @@ from typing import List
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
+from rich.live import Live
+from rich.text import Text
+from rich.progress import BarColumn, Progress, TextColumn
+from time import perf_counter
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from .benchmark import run_model_benchmark
 from .config import settings
@@ -102,6 +107,70 @@ HELP_TEXT = """
 
 console = Console()
 
+# Thread pool for running blocking operations so the UI can remain responsive
+_CLI_EXECUTOR = ThreadPoolExecutor(max_workers=4)
+
+
+def _get_phase_avg_ms(phase: str) -> float:
+    try:
+        metrics = get_metrics_summary_service(limit=200)
+        for p in metrics.get("phases", []):
+            if p.get("phase") == phase:
+                return float(p.get("avg_ms", 0.0) or 0.0)
+    except Exception:
+        pass
+    return 0.0
+
+
+def _format_clock_panel(elapsed_s: float, expected_s: float) -> Panel:
+    # color: green if < expected, orange if within 2x, red otherwise
+    if expected_s <= 0:
+        color = "yellow"
+    elif elapsed_s <= expected_s:
+        color = "green"
+    elif elapsed_s <= expected_s * 2:
+        color = "orange3"
+    else:
+        color = "red"
+
+    txt = Text()
+    txt.append("⏱ ", style="bold")
+    txt.append(f"Elapsed: {elapsed_s:.2f}s\n", style=color)
+    if expected_s > 0:
+        txt.append(f"Expected (avg): {expected_s:.2f}s\n", style="dim")
+        # slider bar
+        try:
+            percent = min(1.0, elapsed_s / max(0.001, expected_s * 1.5))
+        except Exception:
+            percent = 0.0
+        bar_width = 28
+        filled = int(percent * bar_width)
+        bar = "█" * filled + "─" * (bar_width - filled)
+        txt.append(bar + "\n", style=color)
+    else:
+        txt.append("Expected: N/A\n", style="dim")
+
+    return Panel(txt, title="Operation Timer", border_style=color)
+
+
+def _call_with_loader(func, *args, phase: str = "", label: str = "Working", **kwargs):
+    """Run func(*args, **kwargs) in a thread and show a live timer/loader until it finishes.
+    Returns func result or raises exception from func.
+    """
+    expected_ms = _get_phase_avg_ms(phase)
+    expected_s = expected_ms / 1000.0 if expected_ms else 0.0
+
+    future = _CLI_EXECUTOR.submit(func, *args, **kwargs)
+
+    start = perf_counter()
+    with Live(_format_clock_panel(0.0, expected_s), refresh_per_second=8, console=console) as live:
+        while not future.done():
+            elapsed = perf_counter() - start
+            panel = _format_clock_panel(elapsed, expected_s)
+            live.update(panel)
+    # future done; get result or raise
+    result = future.result()
+    return result
 
 def _render_banner(ui: dict) -> None:
     panel_color = str(ui.get("panel_color", "cyan"))
@@ -128,6 +197,13 @@ def _render_banner(ui: dict) -> None:
         console.print(Panel(outer, border_style=panel_color))
     else:
         console.print(Panel(left, border_style=panel_color))
+
+
+def _box_print(content, title: str = None, style: str = None) -> None:
+    """Print content inside a Panel using current UI panel color."""
+    ui = load_ui_config()
+    panel_color = str(ui.get("panel_color", "cyan")) if style is None else style
+    console.print(Panel(content, title=title, border_style=panel_color))
 
 
 def _handle_config_command(raw: str, ui: dict) -> bool:
@@ -190,7 +266,7 @@ def _print_digest(snapshot_id: str = "", model: str = "", max_bullets: int = 12)
         model=model or None,
         max_bullets=max_bullets,
     )
-    response = generate_digest_service(request)
+    response = _call_with_loader(generate_digest_service, request, phase="digest.total", label="Generating digest")
     console.print(format_digest_text(response))
 
 
@@ -486,7 +562,7 @@ def _render_metrics_summary(metrics: dict) -> None:
 def run_cli() -> None:  # noqa: C901
     ui = load_ui_config()
     _render_banner(ui)
-    console.print("Type 'help' for commands. Type 'exit' to quit.")
+    _box_print("Type 'help' for commands. Type 'exit' to quit.")
     session_model = ""
 
     while True:
@@ -507,7 +583,7 @@ def run_cli() -> None:  # noqa: C901
             break
 
         if lower == "help":
-            console.print(HELP_TEXT)
+            _box_print(HELP_TEXT, title="Help")
             continue
 
         if lower.startswith("config"):
@@ -515,7 +591,7 @@ def run_cli() -> None:  # noqa: C901
             continue
 
         if lower in {"hi", "hello", "hey", "yo"}:
-            console.print("Hi. Try: news today, agenda, fetch --rss-only, or help")
+            _box_print("Hi. Try: news today, agenda, fetch --rss-only, or help")
             continue
 
         if lower.startswith("model"):
@@ -523,28 +599,36 @@ def run_cli() -> None:  # noqa: C901
             if len(parts) == 1:
                 current = session_model or settings.ollama_model
                 source = "custom (this session)" if session_model else "from .env (default)"
-                console.print("\n[bold cyan]Current Model[/]")
-                console.print(f"  Model: {current}")
-                console.print(f"  Source: {source}")
-                console.print("\n  Usage: [bold]model <model_name>[/] to switch models (e.g., model mistral)")
-                console.print("  Note: Changes apply to digests in this session only\n")
+                txt = Text()
+                txt.append("Current Model\n", style="bold cyan")
+                txt.append(f"Model: {current}\n")
+                txt.append(f"Source: {source}\n")
+                txt.append("\nUsage: model <model_name> to switch models (e.g., model mistral)\n", style="dim")
+                txt.append("Note: Changes apply to digests in this session only\n", style="dim")
+                _box_print(txt, title="Model")
             else:
                 session_model = " ".join(parts[1:]).strip()
-                console.print(f"[green]✓[/] Session model switched to: [bold]{session_model}[/]")
-                console.print("  (Affects: [dim]news today, digest, pipeline, agenda[/])")
+                txt = Text()
+                txt.append("✓ Session model switched to: ", style="green")
+                txt.append(session_model, style="bold")
+                txt.append("\n(Affects: news today, digest, pipeline, agenda)", style="dim")
+                _box_print(txt, title="Model")
             continue
 
         if lower in {"news today", "whats the news for today", "what's the news for today", "news", "today news"}:
             try:
-                digest = generate_today_india_digest_service(
+                digest = _call_with_loader(
+                    generate_today_india_digest_service,
                     limit_per_source=20,
                     model=session_model or "",
                     max_bullets=12,
+                    phase="digest.total",
+                    label="Generating today's digest",
                 )
-                console.print("Generated fresh India-only digest for today.")
-                console.print(format_india_digest_text(digest))
+                _box_print("Generated fresh India-only digest for today.", title="Info")
+                _box_print(format_india_digest_text(digest), title="Today's Digest")
             except Exception as exc:
-                console.print(f"Error: {exc}")
+                _box_print(Text(f"Error: {exc}", style="red"), title="Error")
             continue
 
         if lower in {"word today", "word", "vocab", "vocab today", "word of the day"}:
@@ -576,14 +660,17 @@ def run_cli() -> None:  # noqa: C901
             if cmd == "fetch":
                 limit = _parse_int_arg(args, "--limit", 20)
                 rss_only = "--rss-only" in args
-                response = fetch_news_service(
-                    FetchRequest(limit_per_source=limit, include_newsapi=not rss_only)
+                response = _call_with_loader(
+                    fetch_news_service,
+                    FetchRequest(limit_per_source=limit, include_newsapi=not rss_only),
+                    phase="fetch.total",
+                    label="Fetching news",
                 )
-                console.print(
-                    f"Fetched {response.total_fetched} items. "
-                    f"Snapshot: {response.snapshot_id}. "
-                    f"Sources: {response.source_breakdown}"
-                )
+                txt = Text()
+                txt.append(f"Fetched {response.total_fetched} items.\n", style="bold")
+                txt.append(f"Snapshot: {response.snapshot_id}\n", style="dim")
+                txt.append(f"Sources: {response.source_breakdown}\n", style="dim")
+                _box_print(txt, title="Fetch Result")
             elif cmd == "digest":
                 snapshot_id = _parse_arg(args, "--snapshot", "")
                 model = _parse_arg(args, "--model", session_model)
@@ -592,12 +679,18 @@ def run_cli() -> None:  # noqa: C901
             elif cmd == "pipeline":
                 limit = _parse_int_arg(args, "--limit", 20)
                 rss_only = "--rss-only" in args
-                result = run_pipeline_service(
+                result = _call_with_loader(
+                    run_pipeline_service,
                     FetchRequest(limit_per_source=limit, include_newsapi=not rss_only),
                     DigestRequest(model=session_model or None),
+                    phase="pipeline.total",
+                    label="Running pipeline",
                 )
-                console.print(f"Fetched {result.fetch.total_fetched} items. Snapshot: {result.fetch.snapshot_id}")
-                console.print(format_digest_text(result.digest))
+                txt = Text()
+                txt.append(f"Fetched {result.fetch.total_fetched} items.\n", style="bold")
+                txt.append(f"Snapshot: {result.fetch.snapshot_id}\n", style="dim")
+                _box_print(txt, title="Pipeline Result")
+                _box_print(format_digest_text(result.digest), title="Digest")
             elif cmd == "search":
                 query = ""
                 if args and not args[0].startswith("--"):
@@ -644,11 +737,14 @@ def run_cli() -> None:  # noqa: C901
 
                 if subcmd == "pack":
                     count = _parse_int_arg(args, "--count", 5)
-                    pack = word_pack_service(
+                    pack = _call_with_loader(
+                        word_pack_service,
                         limit_per_source=25,
                         difficulty=level,
                         count=count,
                         no_repeat_days=no_repeat_days,
+                        phase="digest.total",
+                        label="Generating word pack",
                     )
                     _render_word_pack(pack.dict())
                     continue
@@ -657,15 +753,24 @@ def run_cli() -> None:  # noqa: C901
                     console.print("Usage: word today|pack [--level easy|balanced|exam] [--no-repeat DAYS] [--count N]")
                     continue
 
-                result = word_of_day_service(limit_per_source=25, difficulty=level, no_repeat_days=no_repeat_days)
-                console.print("Word of the day (India current affairs):")
-                console.print(f"- Word: {result.word}")
-                console.print(f"- Context headline: {result.context_headline}")
-                console.print(f"- Relevance: {result.relevance_note}")
-                console.print(f"- Meaning: {result.definition}")
-                console.print(f"- Difficulty: {result.difficulty}")
-                console.print(f"- No-repeat days: {no_repeat_days}")
-                console.print(f"- Snapshot: {result.snapshot_id}")
+                result = _call_with_loader(
+                    word_of_day_service,
+                    limit_per_source=25,
+                    difficulty=level,
+                    no_repeat_days=no_repeat_days,
+                    phase="digest.total",
+                    label="Generating word of the day",
+                )
+                txt = Text()
+                txt.append("Word of the day (India current affairs):\n", style="bold")
+                txt.append(f"- Word: {result.word}\n")
+                txt.append(f"- Context: {result.context_headline}\n", style="dim")
+                txt.append(f"- Relevance: {result.relevance_note}\n")
+                txt.append(f"- Meaning: {result.definition}\n")
+                txt.append(f"- Difficulty: {result.difficulty}\n")
+                txt.append(f"- No-repeat days: {no_repeat_days}\n")
+                txt.append(f"- Snapshot: {result.snapshot_id}\n", style="dim")
+                _box_print(txt, title="Word of the Day")
             elif cmd == "benchmark":
                 snapshot_id = _parse_arg(args, "--snapshot", "")
                 if not snapshot_id:
