@@ -808,9 +808,18 @@ def get_latest_digest_snapshot() -> DigestResponse:
             payload = json.loads(row[0])
             return DigestResponse(**payload)
     except Exception as exc:
-        _log.debug("Failed to load latest digest: %s", exc)
+        _log.debug("Failed to load latest digest from DB: %s", exc)
 
-    # Fallback: return empty digest
+    # Fallback: try legacy JSON digest files
+    try:
+        legacy_files = sorted(storage.digest_dir.glob("*.json"))
+        if legacy_files:
+            payload = json.loads(legacy_files[-1].read_text(encoding="utf-8"))
+            return DigestResponse(**payload)
+    except Exception as exc:
+        _log.debug("Failed to load latest digest from legacy files: %s", exc)
+
+    # Final fallback: return empty digest
     return DigestResponse(
         snapshot_id="",
         model="",

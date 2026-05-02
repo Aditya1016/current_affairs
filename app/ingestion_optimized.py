@@ -42,7 +42,10 @@ def _parse_dt(value: str) -> str:
     if not value:
         return datetime.now(timezone.utc).isoformat()
     try:
-        return date_parser.parse(value).astimezone(timezone.utc).isoformat()
+        parsed = date_parser.parse(value)
+        if parsed.tzinfo is None or parsed.tzinfo.utcoffset(None) is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        return parsed.astimezone(timezone.utc).isoformat()
     except Exception:
         return datetime.now(timezone.utc).isoformat()
 

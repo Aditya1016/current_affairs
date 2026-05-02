@@ -90,7 +90,7 @@ Analysis reports and efficiency evaluations.
 - **Analysis**: [OPTIMIZATION_ANALYSIS.md](./optimization/OPTIMIZATION_ANALYSIS.md)
 - **Code Examples**: [CODE_COMPARISON.md](./optimization/CODE_COMPARISON.md)
 
-**Key Improvement**: News fetching **80-100s → 20-30s** (4-5x speedup with threading)
+**Key Improvement**: News fetching **80-100s → 20-30s** (4-5x speedup with threading, see [OPTIMIZATION_ANALYSIS.md](./optimization/OPTIMIZATION_ANALYSIS.md))
 
 ### User Interface & CLI
 - **UX Improvements**: [CLI_IMPROVEMENTS.md](./guides/CLI_IMPROVEMENTS.md)

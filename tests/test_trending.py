@@ -183,3 +183,29 @@ class TestGetTrendingByCategory:
             results = get_trending_by_category(category="india", days=7, limit=3)
 
         assert len(results) <= 3
+
+    def test_percentage_field_present(self):
+        snap = _make_snapshot([_item("Lok Sabha Session", category="india")], days_ago=1)
+        with self._patch_storage([snap]):
+            results = get_trending_by_category(category="india", days=7, limit=10)
+
+        for r in results:
+            assert "percentage" in r
+            assert 0.0 <= r["percentage"] <= 100.0
+
+    def test_min_occurrences_respected(self):
+        snap = _make_snapshot([_item("Rare India Topic", category="india")], days_ago=1)
+        with self._patch_storage([snap]):
+            results = get_trending_by_category(category="india", days=7, limit=10, min_occurrences=99)
+
+        assert results == []
+
+    def test_snapshot_without_timestamp_skipped(self):
+        snap_no_ts = {"items": [_item("No Time India", category="india")]}
+        snap_with_ts = _make_snapshot([_item("Supreme Court India", category="india")], days_ago=1)
+        with self._patch_storage([snap_no_ts, snap_with_ts]):
+            results = get_trending_by_category(category="india", days=7, limit=10)
+
+        topics = [r["topic"] for r in results]
+        # Items from the timestampless snapshot should not appear
+        assert not any("Time" in t for t in topics)

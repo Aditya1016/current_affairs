@@ -17,7 +17,7 @@ def _tokenize(text: str) -> Set[str]:
         "with", "this", "these", "which", "who", "what", "when", "where", "why", "how"
     }
     words = re.findall(r'\b\w+\b', text.lower())
-    return {w for w in words if w not in stop_words and len(w) > 2}
+    return {w for w in words if w not in stop_words and len(w) >= 2}
 
 
 def _semantic_similarity(text_a: str, text_b: str, threshold: float = 0.6) -> bool:
@@ -55,8 +55,13 @@ def _normalize_length(point: str, target_max: int = 140) -> str:
     """Truncate point to target length if needed, respecting word boundaries."""
     if len(point) <= target_max:
         return point
-    truncated = point[:target_max].rsplit(' ', 1)[0]
-    return truncated.rstrip('.,;:') + '.'
+    # Leave room for the appended period
+    truncated = point[:target_max - 1].rsplit(' ', 1)[0]
+    result = truncated.rstrip('.,;:') + '.'
+    # Final clamp: ensure we never exceed target_max
+    if len(result) > target_max:
+        result = result[:target_max - 1].rstrip('.,;: ') + '.'
+    return result
 
 
 def _extract_first_json(text: str) -> str:  # noqa: C901
@@ -99,7 +104,6 @@ def _normalize_and_dedupe(points: List[DigestPoint], max_bullets: int, source_te
     """
     seen_points = []
     out = []
-    source_corpus = " ".join(source_texts) if source_texts else ""
 
     for p in points:
         point_text = p.point.strip()
@@ -115,9 +119,14 @@ def _normalize_and_dedupe(points: List[DigestPoint], max_bullets: int, source_te
         if any(_semantic_similarity(point_text, sp, threshold=0.65) for sp in seen_points):
             continue
 
-        # Validate against source text if provided (should have 30%+ coverage)
-        if source_corpus and not _validate_extractive(point_text, source_corpus, min_coverage=0.3):
-            continue
+        # Validate against source texts if provided: at least one source must provide 30%+ coverage
+        if source_texts:
+            grounded = any(
+                _validate_extractive(point_text, src, min_coverage=0.3)
+                for src in source_texts
+            )
+            if not grounded:
+                continue
 
         # Normalize length
         normalized_point = _normalize_length(point_text, target_max=140)

@@ -46,14 +46,21 @@ def detect_trending_topics(  # noqa: C901
     for snapshot_data in snapshots:
         if not snapshot_data.get("items"):
             continue
-        snap_time = snapshot_data.get("generated_at")
-        if snap_time:
-            try:
-                snap_dt = datetime.fromisoformat(snap_time.replace('Z', '+00:00')).astimezone(IST)
-                if snap_dt < since:
-                    continue
-            except Exception:
-                pass
+        # Try multiple known timestamp keys for backward compatibility
+        snap_time = (
+            snapshot_data.get("generated_at")
+            or snapshot_data.get("created_at")
+            or snapshot_data.get("timestamp")
+        )
+        if not snap_time:
+            # No usable timestamp — skip to avoid including out-of-window data
+            continue
+        try:
+            snap_dt = datetime.fromisoformat(snap_time.replace('Z', '+00:00')).astimezone(IST)
+            if snap_dt < since:
+                continue
+        except Exception:
+            continue
 
         filtered_count += 1
         snapshot_topics: set = set()
@@ -105,7 +112,7 @@ def detect_trending_topics(  # noqa: C901
 
 
 def get_trending_by_category(  # noqa: C901
-    category: str = "india", days: int = 7, limit: int = 5
+    category: str = "india", days: int = 7, limit: int = 5, min_occurrences: int = 1
 ) -> List[Dict[str, object]]:
     """Get trending topics for a specific category."""
     since = datetime.now(IST) - timedelta(days=days)
@@ -113,19 +120,28 @@ def get_trending_by_category(  # noqa: C901
 
     topic_counter: Counter = Counter()
     topic_stories: Dict[str, List[NewsItem]] = defaultdict(list)
+    topic_snapshot_count: Counter = Counter()
 
+    filtered_count = 0
     for snapshot_data in snapshots:
         if not snapshot_data.get("items"):
             continue
-        snap_time = snapshot_data.get("generated_at")
-        if snap_time:
-            try:
-                snap_dt = datetime.fromisoformat(snap_time.replace('Z', '+00:00')).astimezone(IST)
-                if snap_dt < since:
-                    continue
-            except Exception:
-                pass
+        snap_time = (
+            snapshot_data.get("generated_at")
+            or snapshot_data.get("created_at")
+            or snapshot_data.get("timestamp")
+        )
+        if not snap_time:
+            continue
+        try:
+            snap_dt = datetime.fromisoformat(snap_time.replace('Z', '+00:00')).astimezone(IST)
+            if snap_dt < since:
+                continue
+        except Exception:
+            continue
 
+        filtered_count += 1
+        snapshot_topics: set = set()
         for item_data in snapshot_data["items"]:
             if item_data.get("category", "world").lower() != category.lower():
                 continue
@@ -136,6 +152,7 @@ def get_trending_by_category(  # noqa: C901
 
             for entity in all_entities:
                 topic_counter[entity] += 1
+                snapshot_topics.add(entity)
                 if len(topic_stories[entity]) < 3:
                     topic_stories[entity].append(
                         NewsItem(
@@ -148,10 +165,14 @@ def get_trending_by_category(  # noqa: C901
                         )
                     )
 
+        for topic in snapshot_topics:
+            topic_snapshot_count[topic] += 1
+
     trending = [
         {
             "topic": topic,
             "frequency": count,
+            "percentage": round(100 * topic_snapshot_count[topic] / max(filtered_count, 1), 1),
             "category": category,
             "sample_stories": [
                 {
@@ -163,6 +184,7 @@ def get_trending_by_category(  # noqa: C901
             ],
         }
         for topic, count in topic_counter.most_common()
+        if count >= min_occurrences
     ]
 
     return trending[:limit]

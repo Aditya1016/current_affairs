@@ -511,7 +511,7 @@ class Storage:
         with self._connect() as conn:
             rows = conn.execute(
                 """
-                SELECT payload_json FROM snapshots
+                SELECT payload_json, created_at FROM snapshots
                 ORDER BY created_at DESC
                 LIMIT ?
                 """,
@@ -522,6 +522,9 @@ class Storage:
         for row in rows:
             try:
                 payload = json.loads(row[0])
+                # Inject the DB-level timestamp so callers can time-filter reliably
+                if "created_at" not in payload:
+                    payload["created_at"] = row[1]
                 snapshots.append(payload)
             except (json.JSONDecodeError, TypeError):
                 continue

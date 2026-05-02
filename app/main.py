@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import HTMLResponse
 
@@ -26,6 +28,7 @@ from .service import WordNotFoundError
 from .service import get_latest_digest_snapshot
 from .trending import detect_trending_topics, get_trending_by_category
 
+_log = logging.getLogger(__name__)
 app = FastAPI(title="Current Affairs Backend", version="0.1.0")
 
 
@@ -190,6 +193,7 @@ def dashboard() -> str:
             trending_india=trending_india,
         )
     except Exception:
+        _log.exception("Dashboard rendering failed; returning empty fallback")
         # Fallback: empty dashboard
         return generate_dashboard_html()
 

@@ -244,11 +244,13 @@ def generate_search_results_html(search_results: Dict) -> str:
         source = html_lib.escape(result.get("source", "N/A"))
         category = html_lib.escape(result.get("category", "world"))
         raw_url = result.get("url", "#")
-        # Only allow http/https URLs to prevent javascript: XSS
+        # Validate URL type and only allow http/https to prevent javascript: XSS
+        if not isinstance(raw_url, str):
+            raw_url = "#"
         safe_url = html_lib.escape(raw_url) if raw_url.startswith(("http://", "https://")) else "#"
         results_html += f"""
         <div class="result-item">
-            <h3><a href="{safe_url}" target="_blank">{title}</a></h3>
+            <h3><a href="{safe_url}" target="_blank" rel="noopener noreferrer">{title}</a></h3>
             <p class="meta">
                 <span class="source">{source}</span>
                 <span class="category">{category}</span>

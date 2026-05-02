@@ -531,7 +531,7 @@ def run_cli() -> None:  # noqa: C901
             else:
                 session_model = " ".join(parts[1:]).strip()
                 console.print(f"[green]✓[/] Session model switched to: [bold]{session_model}[/]")
-                console.print("  (Affects: [dim]news today, word today, word pack, agenda[/])")
+                console.print("  (Affects: [dim]news today, digest, pipeline, agenda[/])")
             continue
 
         if lower in {"news today", "whats the news for today", "what's the news for today", "news", "today news"}:
