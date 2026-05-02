@@ -47,19 +47,36 @@ You can run this project in two modes:
    or directly:
 
    ```powershell
-   .\.venv\bin\python.exe -m app.cli
+   .\.venv\Scripts\python.exe -m app.cli
    ```
 
 ## Terminal Chatbot Commands
 
-- `news today` : fetch and summarize latest headlines now
+- `news today` : fetch and summarize fresh India headlines for today only
+- `word today --level exam --no-repeat 14` : fetch fresh India news and print a vocabulary word by difficulty (`easy|balanced|exam`) while avoiding repeats
+- `word pack --count 5 --level balanced --no-repeat 14` : generate a unique vocabulary pack from today's India news
 - `agenda` : summarize latest stored snapshot
 - `fetch --rss-only --limit 20` : fetch without NewsAPI
 - `digest --snapshot <id> --model qwen3.5:9b --bullets 12`
 - `pipeline --rss-only --limit 20` : fetch + digest in one command
-- `benchmark --snapshot <id> --models "qwen3.5:9b,mistral:7b-instruct"`
+- `search "india semiconductor" --days 30 --limit 20 --plot --plot-by source` : search indexed stories and optionally show distribution chart
+- `benchmark --snapshot <id> --models "qwen3.5:9b,mistral:7b-instruct" --plot --plot-mode both` : compare models and optionally chart score/latency
 - `graph --snapshot <id> --top 36 --min-sim 0.44` : build relationship graph files
 - `metrics --snapshot <id> --limit 50` : show slowest pipeline phases by timing
+- `metrics --phase pipeline.total --trend 30` : show phase latency sparkline and recent samples
+- `metrics --phase pipeline.total --trend 30 --plot` : show trend plus terminal line chart (plotext)
+
+### Quick `friday` Command in PowerShell
+
+To launch the app by typing `friday`:
+
+```powershell
+.\install_friday_command.ps1
+. $PROFILE.CurrentUserAllHosts
+friday
+```
+
+This adds a `friday` function in your PowerShell profile that runs `friday.ps1` from this repo.
 - `route-test --prompts "p1|p2|p3"` : run specialist routing harness
 - `logo` : print FRIDAY logo path
 - `model <name>` : set session model
@@ -97,6 +114,13 @@ You can run this project in two modes:
 - `POST /generate-digest`
 - `POST /run-pipeline`
 - `POST /benchmark-models`
+- `GET /metrics/summary`
+- `GET /metrics/trend`
+- `GET /word/today`
+   - Query params: `limit_per_source`, `difficulty=easy|balanced|exam`, `no_repeat_days`
+- `GET /word/pack`
+   - Query params: `limit_per_source`, `difficulty=easy|balanced|exam`, `count`, `no_repeat_days`
+- `GET /stories/search`
 
 ## Example Requests
 
