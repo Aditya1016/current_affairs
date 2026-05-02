@@ -123,11 +123,11 @@ def _elapsed_ms(start: float) -> float:
     return (perf_counter() - start) * 1000.0
 
 
-def _parse_iso_dt(value: str) -> datetime:
+def _parse_iso_dt(value: str) -> Optional[datetime]:
     try:
         return datetime.fromisoformat((value or "").replace("Z", "+00:00")).astimezone(IST)
     except Exception:
-        return datetime.now(IST)
+        return None
 
 
 def _filter_today_india_items(items: List[NewsItem]) -> List[NewsItem]:
@@ -136,7 +136,8 @@ def _filter_today_india_items(items: List[NewsItem]) -> List[NewsItem]:
     for item in items:
         if item.category != "india":
             continue
-        if _parse_iso_dt(item.published_at or "").date() != today_ist:
+        dt = _parse_iso_dt(item.published_at or "")
+        if dt is None or dt.date() != today_ist:
             continue
         out.append(item)
     return out
