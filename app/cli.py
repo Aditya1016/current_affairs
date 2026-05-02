@@ -23,6 +23,7 @@ from .service import (
     word_of_day_service,
 )
 from .ui_config import load_ui_config, save_ui_config
+from .trending import detect_trending_topics, get_trending_by_category
 
 
 HELP_TEXT = """
@@ -40,6 +41,10 @@ Commands:
   pipeline [--rss-only] [--limit N] Run fetch + digest in one step
     search "QUERY" [--limit N] [--category india|world] [--source NAME] [--days N] [--plot] [--plot-by source|category]
                                                                         Search indexed stories from past snapshots
+    trending [--days N] [--min-occurrences N] [--limit N]
+                                                                        Show trending topics across all categories
+    trending-india [--days N] [--limit N]                             Show trending topics in India news
+    trending-world [--days N] [--limit N]                             Show trending topics in World news
     benchmark --snapshot ID [--models "m1,m2"] [--bullets N] [--plot] [--plot-mode score|latency|both]
                                                                         Run model comparison with optional terminal charts
     graph [--snapshot ID] [--top N] [--min-sim F] [--no-adaptive]
@@ -411,6 +416,53 @@ def _render_word_pack(result: dict) -> None:
     )
 
 
+def _render_trending_topics(topics: List[dict]) -> None:
+    """Render trending topics as a formatted table."""
+    table = Table(title="Trending Topics")
+    table.add_column("Rank", justify="right")
+    table.add_column("Topic")
+    table.add_column("Frequency")
+    table.add_column("Top Stories")
+
+    for idx, topic_data in enumerate(topics, start=1):
+        topic = topic_data.get("topic", "N/A")
+        freq = topic_data.get("frequency", 0)
+        pct = topic_data.get("percentage", 0)
+        stories = topic_data.get("sample_stories", [])
+        story_titles = "; ".join([s.get("title", "")[:40] for s in stories[:2]])
+        
+        table.add_row(
+            str(idx),
+            topic,
+            f"{freq} ({pct}%)",
+            story_titles,
+        )
+
+    if not topics:
+        console.print("No trending topics found.")
+        return
+
+    console.print(table)
+
+
+def _render_metrics_summary(metrics: dict) -> None:
+    """Render metrics summary as a formatted table."""
+    table = Table(title="Metrics Summary")
+    table.add_column("Phase", style="cyan")
+    table.add_column("Calls", justify="right")
+    table.add_column("Total (ms)", justify="right")
+    table.add_column("Avg (ms)", justify="right")
+
+    for phase_data in metrics.get("phases", []):
+        phase = phase_data.get("phase", "unknown")
+        calls = phase_data.get("call_count", 0)
+        total_ms = phase_data.get("total_ms", 0.0)
+        avg_ms = total_ms / calls if calls > 0 else 0
+        table.add_row(str(phase), str(calls), f"{total_ms:.2f}", f"{avg_ms:.2f}")
+
+    console.print(table)
+
+
 def run_cli() -> None:  # noqa: C901
     ui = load_ui_config()
     _render_banner(ui)
@@ -540,6 +592,22 @@ def run_cli() -> None:  # noqa: C901
                 _render_story_search(search_payload)
                 if show_plot:
                     _render_search_distribution_plot(search_payload, plot_by=plot_by)
+            elif cmd in {"trending", "trending-india", "trending-world"}:
+                days = _parse_int_arg(args, "--days", 7)
+                limit = _parse_int_arg(args, "--limit", 10 if cmd == "trending" else 5)
+                min_occ = _parse_int_arg(args, "--min-occurrences", 3)
+                
+                if cmd == "trending":
+                    topics = detect_trending_topics(days=days, min_occurrences=min_occ, limit=limit)
+                    console.print(f"\n[bold cyan]Trending Topics (Last {days} days)[/]")
+                elif cmd == "trending-india":
+                    topics = get_trending_by_category(category="india", days=days, limit=limit)
+                    console.print(f"\n[bold cyan]Trending in India (Last {days} days)[/]")
+                else:  # trending-world
+                    topics = get_trending_by_category(category="world", days=days, limit=limit)
+                    console.print(f"\n[bold cyan]Trending in World (Last {days} days)[/]")
+                
+                _render_trending_topics(topics)
             elif cmd in {"word", "vocab"}:
                 level = _parse_arg(args, "--level", "balanced")
                 no_repeat_days = _parse_int_arg(args, "--no-repeat", 14)

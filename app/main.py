@@ -21,6 +21,7 @@ from .service import search_stories_service
 from .service import word_pack_service
 from .service import word_of_day_service
 from .service import WordNotFoundError
+from .trending import detect_trending_topics, get_trending_by_category
 
 app = FastAPI(title="Current Affairs Backend", version="0.1.0")
 
@@ -134,3 +135,36 @@ def search_stories(
         source=source,
         days=days,
     )
+
+
+@app.get("/trending/topics")
+def trending_topics(
+    days: int = Query(default=7, ge=1, le=90),
+    min_occurrences: int = Query(default=3, ge=1, le=20),
+    limit: int = Query(default=10, ge=1, le=50),
+) -> dict:
+    """Get trending topics across all stories in the last N days."""
+    return {
+        "trending": detect_trending_topics(
+            days=days,
+            min_occurrences=min_occurrences,
+            limit=limit,
+        )
+    }
+
+
+@app.get("/trending/by-category")
+def trending_by_category(
+    category: str = Query(default="india"),
+    days: int = Query(default=7, ge=1, le=90),
+    limit: int = Query(default=5, ge=1, le=20),
+) -> dict:
+    """Get trending topics for a specific category (india or world)."""
+    return {
+        "category": category,
+        "trending": get_trending_by_category(
+            category=category,
+            days=days,
+            limit=limit,
+        ),
+    }
