@@ -225,30 +225,6 @@ def _render_graph_summary(result: dict) -> None:
         console.print(f"{idx}. size={len(cluster)} :: " + " | ".join(preview_titles))
 
 
-def _render_metrics_summary(result: dict) -> None:
-    table = Table(title="Pipeline Phase Timing Summary")
-    table.add_column("Phase")
-    table.add_column("Samples", justify="right")
-    table.add_column("Avg ms", justify="right")
-    table.add_column("Max ms", justify="right")
-    table.add_column("Total ms", justify="right")
-
-    for row in result.get("phases", []):
-        table.add_row(
-            str(row.get("phase", "")),
-            str(row.get("samples", 0)),
-            str(row.get("avg_ms", 0)),
-            str(row.get("max_ms", 0)),
-            str(row.get("total_ms", 0)),
-        )
-
-    if not result.get("phases"):
-        console.print("No metrics yet. Run fetch/digest/pipeline first.")
-        return
-
-    console.print(table)
-
-
 def _sparkline(values: List[float]) -> str:
     if not values:
         return ""
@@ -466,7 +442,7 @@ def _render_trending_topics(topics: List[dict]) -> None:
         pct = topic_data.get("percentage", 0)
         stories = topic_data.get("sample_stories", [])
         story_titles = "; ".join([s.get("title", "")[:40] for s in stories[:2]])
-        
+
         table.add_row(
             str(idx),
             topic,
@@ -539,15 +515,15 @@ def run_cli() -> None:  # noqa: C901
             if len(parts) == 1:
                 current = session_model or settings.ollama_model
                 source = "custom (this session)" if session_model else "from .env (default)"
-                console.print(f"\n[bold cyan]Current Model[/]")
+                console.print("\n[bold cyan]Current Model[/]")
                 console.print(f"  Model: {current}")
                 console.print(f"  Source: {source}")
-                console.print(f"\n  Usage: [bold]model <model_name>[/] to switch models (e.g., model mistral)")
-                console.print(f"  Note: Changes apply to digests in this session only\n")
+                console.print("\n  Usage: [bold]model <model_name>[/] to switch models (e.g., model mistral)")
+                console.print("  Note: Changes apply to digests in this session only\n")
             else:
                 session_model = " ".join(parts[1:]).strip()
                 console.print(f"[green]✓[/] Session model switched to: [bold]{session_model}[/]")
-                console.print(f"  (Affects: [dim]news today, word today, word pack, agenda[/])")
+                console.print("  (Affects: [dim]news today, word today, word pack, agenda[/])")
             continue
 
         if lower in {"news today", "whats the news for today", "what's the news for today", "news", "today news"}:
@@ -639,7 +615,7 @@ def run_cli() -> None:  # noqa: C901
                 days = _parse_int_arg(args, "--days", 7)
                 limit = _parse_int_arg(args, "--limit", 10 if cmd == "trending" else 5)
                 min_occ = _parse_int_arg(args, "--min-occurrences", 3)
-                
+
                 if cmd == "trending":
                     topics = detect_trending_topics(days=days, min_occurrences=min_occ, limit=limit)
                     console.print(f"\n[bold cyan]Trending Topics (Last {days} days)[/]")
@@ -649,7 +625,7 @@ def run_cli() -> None:  # noqa: C901
                 else:  # trending-world
                     topics = get_trending_by_category(category="world", days=days, limit=limit)
                     console.print(f"\n[bold cyan]Trending in World (Last {days} days)[/]")
-                
+
                 _render_trending_topics(topics)
             elif cmd in {"word", "vocab"}:
                 level = _parse_arg(args, "--level", "balanced")

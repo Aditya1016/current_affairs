@@ -22,7 +22,7 @@ def _tokenize(text: str) -> Set[str]:
 
 def _semantic_similarity(text_a: str, text_b: str, threshold: float = 0.6) -> bool:
     """Check if two texts are semantically similar using Jaccard similarity on tokens.
-    
+
     Returns True if similarity >= threshold (meaning they are TOO similar / duplicates).
     """
     tokens_a = _tokenize(text_a)
@@ -39,7 +39,7 @@ def _semantic_similarity(text_a: str, text_b: str, threshold: float = 0.6) -> bo
 
 def _validate_extractive(point: str, source_text: str, min_coverage: float = 0.3) -> bool:
     """Validate that a bullet point is grounded in source text.
-    
+
     Returns True if point is SUPPORTED by source (at least min_coverage% of point tokens appear in source).
     """
     point_tokens = _tokenize(point)
@@ -59,7 +59,7 @@ def _normalize_length(point: str, target_max: int = 140) -> str:
     return truncated.rstrip('.,;:') + '.'
 
 
-def _extract_first_json(text: str) -> str:
+def _extract_first_json(text: str) -> str:  # noqa: C901
     """Extract the first balanced JSON array or object from text."""
     if not text:
         return ""
@@ -73,7 +73,7 @@ def _extract_first_json(text: str) -> str:
             elif text[i] == "]":
                 depth -= 1
                 if depth == 0:
-                    return text[start : i + 1]
+                    return text[start:i + 1]
     # fallback: try object
     start = text.find("{")
     if start != -1:
@@ -91,7 +91,7 @@ def _extract_first_json(text: str) -> str:
 
 def _normalize_and_dedupe(points: List[DigestPoint], max_bullets: int, source_texts: List[str] = None) -> List[DigestPoint]:
     """Deduplicate and validate points using exact/semantic similarity + extractive grounding.
-    
+
     Args:
         points: list of candidate bullet points
         max_bullets: maximum number to return
@@ -100,38 +100,38 @@ def _normalize_and_dedupe(points: List[DigestPoint], max_bullets: int, source_te
     seen_points = []
     out = []
     source_corpus = " ".join(source_texts) if source_texts else ""
-    
+
     for p in points:
         point_text = p.point.strip()
         if not point_text:
             continue
-        
+
         # Skip if exact duplicate (normalized)
         normalized_key = re.sub(r"\W+", " ", point_text.lower()).strip()
         if any(normalized_key == re.sub(r"\W+", " ", sp.lower()).strip() for sp in seen_points):
             continue
-        
+
         # Skip if semantically similar to any existing point (threshold=0.65)
         if any(_semantic_similarity(point_text, sp, threshold=0.65) for sp in seen_points):
             continue
-        
+
         # Validate against source text if provided (should have 30%+ coverage)
         if source_corpus and not _validate_extractive(point_text, source_corpus, min_coverage=0.3):
             continue
-        
+
         # Normalize length
         normalized_point = _normalize_length(point_text, target_max=140)
-        
+
         out.append(DigestPoint(point=normalized_point, sources=p.sources))
         seen_points.append(point_text)
-        
+
         if len(out) >= max_bullets:
             break
-    
+
     return out
 
 
-def parse_model_response(text: str, items: List[NewsItem], max_bullets: int) -> List[DigestPoint]:
+def parse_model_response(text: str, items: List[NewsItem], max_bullets: int) -> List[DigestPoint]:  # noqa: C901
     """Robustly parse model-generated text into DigestPoint list.
 
     Attempts several strategies: direct json, extracting balanced JSON, ast.literal_eval for
@@ -177,8 +177,8 @@ def parse_model_response(text: str, items: List[NewsItem], max_bullets: int) -> 
             if point:
                 points.append(DigestPoint(point=point, sources=sources[:2]))
 
-    # Combine source texts for extractive validation
-    source_texts = [item.snippet or item.title for item in items]
+    # Combine source texts for extractive validation (include both title and snippet)
+    source_texts = [f"{item.title}. {item.snippet or ''}" for item in items]
     points = _normalize_and_dedupe(points, max_bullets, source_texts=source_texts)
     if points:
         return points

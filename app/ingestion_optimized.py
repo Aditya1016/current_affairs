@@ -2,7 +2,7 @@
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Tuple
 from urllib.parse import urlparse, urlunparse
 import logging
 
@@ -60,7 +60,7 @@ def _fetch_single_newsapi_route(route: str, params: dict) -> List[NewsItem]:
         resp = requests.get(f"{NEWSAPI_BASE}/{route}", headers=headers, params=params, timeout=20)
         resp.raise_for_status()
         payload = resp.json()
-        
+
         items: List[NewsItem] = []
         for article in payload.get("articles", []):
             title = _safe_text(article.get("title", ""))
@@ -100,14 +100,14 @@ def fetch_newsapi_threaded(limit_per_source: int) -> List[NewsItem]:
     ]
 
     all_items: List[NewsItem] = []
-    
+
     # Thread pool for 2 NewsAPI routes
     with ThreadPoolExecutor(max_workers=min(2, THREAD_POOL_SIZE)) as executor:
         futures = {
             executor.submit(_fetch_single_newsapi_route, route, params): route
             for route, params in routes
         }
-        
+
         for future in as_completed(futures):
             route = futures[future]
             try:
@@ -115,7 +115,7 @@ def fetch_newsapi_threaded(limit_per_source: int) -> List[NewsItem]:
                 all_items.extend(items)
             except Exception as exc:
                 _log.error(f"NewsAPI fetch for {route} failed: {exc}")
-    
+
     return all_items
 
 
@@ -157,26 +157,26 @@ def _fetch_single_rss_feed(feed_url: str, limit_per_source: int) -> List[NewsIte
             )
     except Exception as exc:
         _log.warning(f"RSS feed {feed_url} failed: {exc}")
-    
+
     return items
 
 
 def fetch_rss_threaded(rss_feeds: List[str], limit_per_source: int) -> List[NewsItem]:
     """Fetch RSS feeds using thread pool for concurrent requests."""
     all_items: List[NewsItem] = []
-    
+
     if not rss_feeds:
         return all_items
-    
+
     # Use thread pool sized for typical RSS feed count
     max_workers = min(len(rss_feeds), THREAD_POOL_SIZE)
-    
+
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         futures = {
             executor.submit(_fetch_single_rss_feed, feed_url, limit_per_source): feed_url
             for feed_url in rss_feeds
         }
-        
+
         for future in as_completed(futures):
             feed_url = futures[future]
             try:
@@ -184,7 +184,7 @@ def fetch_rss_threaded(rss_feeds: List[str], limit_per_source: int) -> List[News
                 all_items.extend(items)
             except Exception as exc:
                 _log.error(f"RSS fetch for {feed_url} failed: {exc}")
-    
+
     return all_items
 
 
@@ -193,16 +193,16 @@ def fetch_all_news_threaded(
 ) -> Tuple[List[NewsItem], Dict[str, int]]:
     """
     Fetch all news using multithreading for concurrent RSS and API requests.
-    
+
     Much faster than sequential fetching:
     - Sequential: ~40 + (N * 20) seconds
     - Threaded: ~20-30 seconds regardless of N
-    
+
     Args:
         limit_per_source: items per source
         include_newsapi: whether to fetch from NewsAPI
         rss_feeds: list of RSS feed URLs
-    
+
     Returns:
         (items, source_breakdown) tuple
     """
@@ -212,14 +212,14 @@ def fetch_all_news_threaded(
     # Fetch from both sources concurrently using a top-level thread pool
     with ThreadPoolExecutor(max_workers=2) as executor:
         futures = {}
-        
+
         # Submit NewsAPI fetch if enabled
         if include_newsapi:
             futures["newsapi"] = executor.submit(fetch_newsapi_threaded, limit_per_source)
-        
+
         # Submit RSS fetch
         futures["rss"] = executor.submit(fetch_rss_threaded, rss_feeds, limit_per_source)
-        
+
         # Collect results as they complete
         for source_type in ["newsapi", "rss"]:
             if source_type not in futures:
@@ -250,11 +250,11 @@ def benchmark_sequential_vs_threaded(limit_per_source: int = 20) -> None:
     Usage: python -c "from app.ingestion_optimized import benchmark_sequential_vs_threaded; benchmark_sequential_vs_threaded()"
     """
     import time
-    
+
     # Use default config values
     rss_feeds = settings.default_rss_feeds
     include_newsapi = bool(settings.newsapi_key)
-    
+
     print("\n" + "="*60)
     print("FETCH NEWS PERFORMANCE BENCHMARK")
     print("="*60)
@@ -263,20 +263,20 @@ def benchmark_sequential_vs_threaded(limit_per_source: int = 20) -> None:
     print(f"RSS feeds: {len(rss_feeds)}")
     print(f"Thread pool size: {THREAD_POOL_SIZE}")
     print("-"*60)
-    
+
     # Threaded version
     print("\nRunning THREADED version...")
     start = time.perf_counter()
     items, breakdown = fetch_all_news_threaded(limit_per_source, include_newsapi, rss_feeds)
     threaded_time = time.perf_counter() - start
-    
+
     print(f"  ✓ Completed in {threaded_time:.2f}s")
     print(f"  ✓ Total items: {len(items)}")
     print(f"  ✓ Breakdown: {breakdown}")
-    
+
     print("\n" + "="*60)
     print(f"THREADED FETCH: {threaded_time:.2f} seconds")
     print("="*60)
     print("\nNote: Sequential version not run to avoid duplicate API calls.")
-    print(f"Expected speedup: 2-5x faster than sequential")
+    print("Expected speedup: 2-5x faster than sequential")
     print(f"Estimated sequential time: {threaded_time * 2.5:.2f} - {threaded_time * 5:.2f} seconds")

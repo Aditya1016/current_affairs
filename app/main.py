@@ -179,11 +179,11 @@ def dashboard() -> str:
     try:
         # Fetch latest digest if available
         digest_data = get_latest_digest_snapshot()
-        
+
         # Fetch trending data
         trending_india = get_trending_by_category(category="india", days=7, limit=5)
         trending_all = detect_trending_topics(days=7, limit=5)
-        
+
         return generate_dashboard_html(
             digest=digest_data,
             trending=trending_all,

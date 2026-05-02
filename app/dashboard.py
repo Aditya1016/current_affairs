@@ -6,19 +6,19 @@ from typing import Dict, List, Optional, Union
 IST = timezone(timedelta(hours=5, minutes=30))
 
 
-def generate_dashboard_html(
+def generate_dashboard_html(  # noqa: C901
     digest: Optional[Union[Dict, object]] = None,
     trending: Optional[List[Dict]] = None,
     trending_india: Optional[List[Dict]] = None,
 ) -> str:
     """Generate a simple HTML dashboard showing digest + trending topics."""
-    
+
     # Convert digest to dict if it's a Pydantic model
     if digest is not None and hasattr(digest, 'dict'):
         digest = digest.dict()
-    
+
     now = datetime.now(IST).strftime("%Y-%m-%d %H:%M:%S IST")
-    
+
     # Build India digest section
     india_html = ""
     if digest and "india_points" in digest:
@@ -28,7 +28,7 @@ def generate_dashboard_html(
             sources = ", ".join(point.get("sources", []))
             india_html += f'<li><strong>{point.get("point")}</strong> <span class="source">({sources})</span></li>'
         india_html += "</ul></div>"
-    
+
     # Build World digest section
     world_html = ""
     if digest and "world_points" in digest:
@@ -38,12 +38,12 @@ def generate_dashboard_html(
             sources = ", ".join(point.get("sources", []))
             world_html += f'<li><strong>{point.get("point")}</strong> <span class="source">({sources})</span></li>'
         world_html += "</ul></div>"
-    
+
     # Build trending section
     trending_html = ""
     if trending or trending_india:
         trending_html = '<div class="section"><h2>🔥 Trending Topics</h2><div class="trending-grid">'
-        
+
         if trending_india:
             trending_html += '<div class="trending-column"><h3>India Trending</h3><ul>'
             for topic_data in trending_india[:5]:
@@ -51,7 +51,7 @@ def generate_dashboard_html(
                 freq = topic_data.get("frequency", 0)
                 trending_html += f'<li>{topic} <span class="frequency">×{freq}</span></li>'
             trending_html += '</ul></div>'
-        
+
         if trending:
             trending_html += '<div class="trending-column"><h3>All Topics</h3><ul>'
             for topic_data in trending[:5]:
@@ -59,9 +59,9 @@ def generate_dashboard_html(
                 pct = topic_data.get("percentage", 0)
                 trending_html += f'<li>{topic} <span class="percentage">{pct}%</span></li>'
             trending_html += '</ul></div>'
-        
+
         trending_html += "</div></div>"
-    
+
     # Build main template
     html = f"""
 <!DOCTYPE html>
@@ -210,13 +210,15 @@ def generate_dashboard_html(
             <h1>📰 Friday</h1>
             <p>Your Local Current Affairs Digest</p>
         </header>
-        
+
         <div class="content">
-            {india_html if india_html else '<div class="empty-state"><p>📭 No digest available. Run `news today` or `pipeline` to generate.</p></div>'}
+            {india_html if india_html else
+             '<div class="empty-state"><p>📭 No digest available. Run `news today` or `pipeline` to generate.</p></div>'}
             {world_html}
-            {trending_html if (trending or trending_india) else '<div class="empty-state"><p>🔍 No trending data available yet.</p></div>'}
+            {trending_html if (trending or trending_india) else
+             '<div class="empty-state"><p>🔍 No trending data available yet.</p></div>'}
         </div>
-        
+
         <footer>
             Generated at {now} | <a href="/api/docs">API Docs</a>
         </footer>
@@ -232,7 +234,7 @@ def generate_search_results_html(search_results: Dict) -> str:
     query = search_results.get("query", "")
     total = search_results.get("total", 0)
     results = search_results.get("results", [])
-    
+
     results_html = ""
     for result in results[:50]:
         title = result.get("title", "N/A")
@@ -248,7 +250,7 @@ def generate_search_results_html(search_results: Dict) -> str:
             </p>
         </div>
         """
-    
+
     html = f"""
 <!DOCTYPE html>
 <html lang="en">

@@ -803,13 +803,13 @@ def get_latest_digest_snapshot() -> DigestResponse:
                 LIMIT 1
                 """
             ).fetchone()
-        
+
         if row:
             payload = json.loads(row[0])
             return DigestResponse(**payload)
     except Exception as exc:
         _log.debug("Failed to load latest digest: %s", exc)
-    
+
     # Fallback: return empty digest
     return DigestResponse(
         snapshot_id="",

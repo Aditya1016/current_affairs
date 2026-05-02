@@ -2,7 +2,7 @@
 
 from collections import Counter, defaultdict
 from datetime import datetime, timedelta, timezone
-from typing import Dict, List, Tuple
+from typing import Dict, List
 
 from .schemas import NewsItem
 from .storage import storage
@@ -12,7 +12,7 @@ IST = timezone(timedelta(hours=5, minutes=30))
 
 def _extract_entities(text: str) -> List[str]:
     """Extract capitalized multi-word phrases as potential entities/topics.
-    
+
     Simple heuristic: uppercase words at start of phrases (capitalized proper nouns).
     """
     import re
@@ -25,21 +25,21 @@ def detect_trending_topics(
     days: int = 7, min_occurrences: int = 3, limit: int = 10
 ) -> List[Dict[str, object]]:
     """Detect trending topics from recent snapshots.
-    
+
     Args:
         days: look back this many days
         min_occurrences: topic must appear in at least this many stories
         limit: return top N topics
-    
+
     Returns:
         List of trending topics sorted by frequency, with sample stories.
     """
     since = datetime.now(IST) - timedelta(days=days)
     snapshots = storage.get_recent_snapshots(limit=100)
-    
+
     topic_counter: Counter = Counter()
     topic_stories: Dict[str, List[NewsItem]] = defaultdict(list)
-    
+
     for snapshot_data in snapshots:
         if not snapshot_data.get("items"):
             continue
@@ -51,13 +51,13 @@ def detect_trending_topics(
                     continue
             except Exception:
                 pass
-        
+
         for item_data in snapshot_data["items"]:
             # Extract topics from title and snippet
             title_entities = _extract_entities(item_data.get("title", ""))
             snippet_entities = _extract_entities(item_data.get("snippet", ""))
             all_entities = set(title_entities + snippet_entities)
-            
+
             for entity in all_entities:
                 topic_counter[entity] += 1
                 if len(topic_stories[entity]) < 5:  # keep up to 5 samples
@@ -71,7 +71,7 @@ def detect_trending_topics(
                             category=item_data.get("category", "world"),
                         )
                     )
-    
+
     # Filter and rank
     trending = [
         {
@@ -91,20 +91,20 @@ def detect_trending_topics(
         for topic, count in topic_counter.most_common()
         if count >= min_occurrences
     ]
-    
+
     return trending[:limit]
 
 
-def get_trending_by_category(
+def get_trending_by_category(  # noqa: C901
     category: str = "india", days: int = 7, limit: int = 5
 ) -> List[Dict[str, object]]:
     """Get trending topics for a specific category."""
     since = datetime.now(IST) - timedelta(days=days)
     snapshots = storage.get_recent_snapshots(limit=100)
-    
+
     topic_counter: Counter = Counter()
     topic_stories: Dict[str, List[NewsItem]] = defaultdict(list)
-    
+
     for snapshot_data in snapshots:
         if not snapshot_data.get("items"):
             continue
@@ -116,15 +116,15 @@ def get_trending_by_category(
                     continue
             except Exception:
                 pass
-        
+
         for item_data in snapshot_data["items"]:
             if item_data.get("category", "world").lower() != category.lower():
                 continue
-            
+
             title_entities = _extract_entities(item_data.get("title", ""))
             snippet_entities = _extract_entities(item_data.get("snippet", ""))
             all_entities = set(title_entities + snippet_entities)
-            
+
             for entity in all_entities:
                 topic_counter[entity] += 1
                 if len(topic_stories[entity]) < 3:
@@ -138,7 +138,7 @@ def get_trending_by_category(
                             category=item_data.get("category", "world"),
                         )
                     )
-    
+
     trending = [
         {
             "topic": topic,
@@ -155,5 +155,5 @@ def get_trending_by_category(
         }
         for topic, count in topic_counter.most_common()
     ]
-    
+
     return trending[:limit]

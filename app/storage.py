@@ -517,7 +517,7 @@ class Storage:
                 """,
                 (bounded_limit,),
             ).fetchall()
-        
+
         snapshots = []
         for row in rows:
             try:
@@ -525,7 +525,7 @@ class Storage:
                 snapshots.append(payload)
             except (json.JSONDecodeError, TypeError):
                 continue
-        
+
         return snapshots
 
 
