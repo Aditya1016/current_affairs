@@ -11,6 +11,10 @@ DEFAULT_UI_CONFIG = {
     "panel_color": "cyan",
     "show_tips": True,
     "show_timers": True,
+    "use_fast_model": False,
+    "fast_model_name": "",
+    "summarizer_concurrency": 2,
+    "confirmation_threshold_s": 0,
 }
 
 
@@ -29,14 +33,17 @@ def load_ui_config() -> Dict[str, object]:
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
         merged = dict(DEFAULT_UI_CONFIG)
-        merged.update({k: v for k, v in data.items() if k in DEFAULT_UI_CONFIG})
+        # Only accept known keys from defaults; ignore unknown keys on disk.
+        for k in DEFAULT_UI_CONFIG.keys():
+            if k in data:
+                merged[k] = data[k]
         return merged
-    except Exception:
+    except (json.JSONDecodeError, OSError, UnicodeDecodeError):
         return dict(DEFAULT_UI_CONFIG)
 
 
 def save_ui_config(config: Dict[str, object]) -> None:
     path = _config_path()
-    payload = dict(DEFAULT_UI_CONFIG)
-    payload.update(config)
+    # Persist only known/default keys to avoid saving unexpected fields.
+    payload = {k: config.get(k, DEFAULT_UI_CONFIG[k]) for k in DEFAULT_UI_CONFIG.keys()}
     path.write_text(json.dumps(payload, ensure_ascii=True, indent=2), encoding="utf-8")

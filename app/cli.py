@@ -94,6 +94,10 @@ HELP_TEXT = """
     config set panel purple         (change panel color)
     config set tips true|false      (show/hide tips)
     config set show_timers true|false (show/hide timer panels and loaders)
+    config set use_fast_model true|false (enable fast model for digests)
+    config set fast_model_name NAME  (set fast model name, e.g. mistral:7b)
+    config set summarizer_concurrency N (parallel summary workers, e.g. 4)
+    config set confirmation_threshold_s N (seconds before pre-action prompt)
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -241,10 +245,55 @@ def _box_print(content, title: str = None, style: str = None) -> None:
     console.print(Panel(content, title=title, border_style=panel_color))
 
 
+# Canonical set-key names shown in help/error messages (aliases like "timers" are intentionally omitted).
+_KNOWN_CONFIG_KEYS = (
+    "name, accent, panel, tips, show_timers, "
+    "use_fast_model, fast_model_name, summarizer_concurrency, confirmation_threshold_s"
+)
+
+# Boolean config keys: command-key → ui-dict-key.
+# "timers" is an undocumented alias for "show_timers" kept for backward compatibility.
+_BOOL_CONFIG_MAP = {
+    "tips": "show_tips",
+    "show_timers": "show_timers",
+    "timers": "show_timers",
+    "use_fast_model": "use_fast_model",
+}
+
+# Integer config keys: command-key → ui-dict-key.
+_INT_CONFIG_MAP = {
+    "summarizer_concurrency": "summarizer_concurrency",
+    "confirmation_threshold_s": "confirmation_threshold_s",
+}
+
+
+def _set_config_key(ui: dict, key: str, value: str) -> str:
+    """Apply key=value to ui dict. Returns an error message on failure or empty string on success."""
+    if key == "name":
+        ui["assistant_name"] = value or "friday"
+    elif key == "accent":
+        ui["accent_color"] = value or "bright_cyan"
+    elif key == "panel":
+        ui["panel_color"] = value or "cyan"
+    elif key == "fast_model_name":
+        ui["fast_model_name"] = value
+    elif key in _BOOL_CONFIG_MAP:
+        ui[_BOOL_CONFIG_MAP[key]] = value.lower() in {"1", "true", "yes", "on"}
+    elif key in _INT_CONFIG_MAP:
+        try:
+            ui[_INT_CONFIG_MAP[key]] = int(value)
+        except ValueError:
+            return f"{_INT_CONFIG_MAP[key]} must be an integer."
+    else:
+        return f"Unknown config key. Use: {_KNOWN_CONFIG_KEYS}"
+    return ""
+
+
 def _handle_config_command(raw: str, ui: dict) -> bool:
     parts = shlex.split(raw)
+    usage = f"Usage: config show | config set <{_KNOWN_CONFIG_KEYS}> <value>"
     if len(parts) < 2:
-        console.print("Usage: config show | config set <name|accent|panel|tips|show_timers> <value>")
+        console.print(usage)
         return True
 
     if parts[1] == "show":
@@ -259,25 +308,15 @@ def _handle_config_command(raw: str, ui: dict) -> bool:
     if parts[1] == "set" and len(parts) >= 4:
         key = parts[2].lower()
         value = " ".join(parts[3:]).strip()
-        if key == "name":
-            ui["assistant_name"] = value or "friday"
-        elif key == "accent":
-            ui["accent_color"] = value or "bright_cyan"
-        elif key == "panel":
-            ui["panel_color"] = value or "cyan"
-        elif key == "tips":
-            ui["show_tips"] = value.lower() in {"1", "true", "yes", "on"}
-        elif key == "show_timers" or key == "timers":
-            ui["show_timers"] = value.lower() in {"1", "true", "yes", "on"}
-        else:
-            console.print("Unknown config key. Use: name, accent, panel, tips, show_timers")
+        err = _set_config_key(ui, key, value)
+        if err:
+            console.print(err)
             return True
-
         save_ui_config(ui)
         console.print("UI config updated.")
         return True
 
-    console.print("Usage: config show | config set <name|accent|panel|tips|show_timers> <value>")
+    console.print(usage)
     return True
 
 
