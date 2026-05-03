@@ -210,6 +210,17 @@ friday> model mistral
 
 ---
 
+## Timer & Loader Settings
+
+The CLI shows an expected-time preview and a live loader for long-running actions. You can control this behavior from the UI config:
+
+```
+config set show_timers true|false
+```
+
+When `show_timers` is `false` the CLI will skip showing the expected time panel and the live timer loader. This is useful for automated runs or when you prefer no interactive UI noise.
+
+
 ## Summary of Changes
 
 | Aspect | Before | After |

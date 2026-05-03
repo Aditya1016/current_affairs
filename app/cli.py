@@ -144,20 +144,53 @@ def _format_clock_panel(elapsed_s: float, expected_s: float, label: str = "Worki
             percent = 0.0
         bar_width = 28
         filled = int(percent * bar_width)
-        bar = "█" * filled + "─" * (bar_width - filled)
+        bar = "█" * filled + "░" * (bar_width - filled)
         txt.append(bar + "\n", style=color)
+        # ETA / Overtime
+        if elapsed_s < expected_s:
+            eta = expected_s - elapsed_s
+            txt.append(f"ETA: {eta:.2f}s\n", style="dim")
+        else:
+            overtime = elapsed_s - expected_s
+            txt.append(f"Over by: {overtime:.2f}s\n", style="bold red")
     else:
         txt.append("Expected: N/A\n", style="dim")
 
     return Panel(txt, title=label, border_style=color)
 
 
+def _show_expected_time(phase: str, title: str = "Expected Time") -> None:
+    """Display the stored average duration for a given phase before running an action."""
+    ui = load_ui_config()
+    if not bool(ui.get("show_timers", True)):
+        return
+    try:
+        expected_ms = _get_phase_avg_ms(phase)
+        expected_s = expected_ms / 1000.0 if expected_ms else 0.0
+        if expected_s <= 0:
+            txt = Text("Expected: N/A", style="dim")
+            _box_print(txt, title=title)
+        else:
+            panel = _format_clock_panel(0.0, expected_s, label=title)
+            console.print(panel)
+    except Exception:
+        txt = Text("Expected: N/A", style="dim")
+        _box_print(txt, title=title)
+
+
 def _call_with_loader(func, *args, phase: str = "", label: str = "Working", **kwargs):
     """Run func(*args, **kwargs) in a thread and show a live timer/loader until it finishes.
     Returns func result or raises exception from func.
     """
+    ui = load_ui_config()
+    show = bool(ui.get("show_timers", True))
+
     expected_ms = _get_phase_avg_ms(phase)
     expected_s = expected_ms / 1000.0 if expected_ms else 0.0
+
+    # If timers disabled, run function without live UI
+    if not show:
+        return func(*args, **kwargs)
 
     future = _CLI_EXECUTOR.submit(func, *args, **kwargs)
 
@@ -267,6 +300,7 @@ def _print_digest(snapshot_id: str = "", model: str = "", max_bullets: int = 12)
         model=model or None,
         max_bullets=max_bullets,
     )
+    _show_expected_time("digest.total", title="Expected Time")
     response = _call_with_loader(generate_digest_service, request, phase="digest.total", label="Generating digest")
     console.print(format_digest_text(response))
 
@@ -618,6 +652,7 @@ def run_cli() -> None:  # noqa: C901
 
         if lower in {"news today", "whats the news for today", "what's the news for today", "news", "today news"}:
             try:
+                _show_expected_time("digest.today_india.total", title="Expected Time")
                 digest = _call_with_loader(
                     generate_today_india_digest_service,
                     limit_per_source=20,
@@ -661,6 +696,7 @@ def run_cli() -> None:  # noqa: C901
             if cmd == "fetch":
                 limit = _parse_int_arg(args, "--limit", 20)
                 rss_only = "--rss-only" in args
+                _show_expected_time("fetch.total", title="Expected Time")
                 response = _call_with_loader(
                     fetch_news_service,
                     FetchRequest(limit_per_source=limit, include_newsapi=not rss_only),
@@ -680,6 +716,7 @@ def run_cli() -> None:  # noqa: C901
             elif cmd == "pipeline":
                 limit = _parse_int_arg(args, "--limit", 20)
                 rss_only = "--rss-only" in args
+                _show_expected_time("pipeline.total", title="Expected Time")
                 result = _call_with_loader(
                     run_pipeline_service,
                     FetchRequest(limit_per_source=limit, include_newsapi=not rss_only),
@@ -738,6 +775,7 @@ def run_cli() -> None:  # noqa: C901
 
                 if subcmd == "pack":
                     count = _parse_int_arg(args, "--count", 5)
+                    _show_expected_time("word_of_day.total", title="Expected Time")
                     pack = _call_with_loader(
                         word_pack_service,
                         limit_per_source=25,
@@ -754,6 +792,7 @@ def run_cli() -> None:  # noqa: C901
                     console.print("Usage: word today|pack [--level easy|balanced|exam] [--no-repeat DAYS] [--count N]")
                     continue
 
+                _show_expected_time("word_of_day.total", title="Expected Time")
                 result = _call_with_loader(
                     word_of_day_service,
                     limit_per_source=25,
