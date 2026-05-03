@@ -14,6 +14,7 @@ DEFAULT_UI_CONFIG = {
     "use_fast_model": False,
     "fast_model_name": "",
     "summarizer_concurrency": 2,
+    "confirmation_threshold_s": 0,
 }
 
 
@@ -37,7 +38,7 @@ def load_ui_config() -> Dict[str, object]:
             if k in data:
                 merged[k] = data[k]
         return merged
-    except Exception:
+    except (json.JSONDecodeError, OSError):
         return dict(DEFAULT_UI_CONFIG)
 
 
