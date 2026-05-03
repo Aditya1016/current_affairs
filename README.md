@@ -94,6 +94,8 @@ This adds a `friday` function in your PowerShell profile that runs `friday.ps1` 
 - Personalization persists in `data/ui_config.json`.
 - You can rename the assistant prompt and theme colors without editing code.
 
+See the CLI-focused improvements and UX notes: [docs/cli_optimization.md](docs/cli_optimization.md)
+
 ## FRIDAY Logo
 
 - Custom logo asset: `assets/friday_logo.svg`
