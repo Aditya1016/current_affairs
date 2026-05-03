@@ -245,11 +245,14 @@ def _box_print(content, title: str = None, style: str = None) -> None:
     console.print(Panel(content, title=title, border_style=panel_color))
 
 
+# Canonical set-key names shown in help/error messages (aliases like "timers" are intentionally omitted).
 _KNOWN_CONFIG_KEYS = (
     "name, accent, panel, tips, show_timers, "
     "use_fast_model, fast_model_name, summarizer_concurrency, confirmation_threshold_s"
 )
 
+# Boolean config keys: command-key → ui-dict-key.
+# "timers" is an undocumented alias for "show_timers" kept for backward compatibility.
 _BOOL_CONFIG_MAP = {
     "tips": "show_tips",
     "show_timers": "show_timers",
@@ -257,6 +260,7 @@ _BOOL_CONFIG_MAP = {
     "use_fast_model": "use_fast_model",
 }
 
+# Integer config keys: command-key → ui-dict-key.
 _INT_CONFIG_MAP = {
     "summarizer_concurrency": "summarizer_concurrency",
     "confirmation_threshold_s": "confirmation_threshold_s",
