@@ -40,21 +40,24 @@ async def record_request_timing(request, call_next):
     """Middleware to record request duration for observability."""
     start = perf_counter()
     response = None
+    exc_type = None
     try:
         response = await call_next(request)
         return response
+    except Exception as exc:
+        exc_type = type(exc).__name__
+        raise
     finally:
         elapsed_ms = (perf_counter() - start) * 1000.0
         # use the path as phase label, normalize slashes -> dots
         path = request.url.path.strip("/") or "root"
         phase = f"http.{path.replace('/', '.')}"
+        meta = {
+            "status_code": getattr(response, "status_code", None),
+            "error": exc_type,
+        }
         try:
-            await run_in_threadpool(
-                storage.save_phase_metric,
-                phase=phase,
-                duration_ms=elapsed_ms,
-                meta={"status_code": getattr(response, "status_code", None)},
-            )
+            await run_in_threadpool(storage.save_phase_metric, phase=phase, duration_ms=elapsed_ms, meta=meta)
         except Exception:
             _log.debug("Failed to record request timing for %s", request.url.path, exc_info=True)
 
