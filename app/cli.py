@@ -185,12 +185,12 @@ def _call_with_loader(func, *args, phase: str = "", label: str = "Working", **kw
     ui = load_ui_config()
     show = bool(ui.get("show_timers", True))
 
-    expected_ms = _get_phase_avg_ms(phase)
-    expected_s = expected_ms / 1000.0 if expected_ms else 0.0
-
-    # If timers disabled, run function without live UI
+    # If timers disabled, run function without any timer/metrics work
     if not show:
         return func(*args, **kwargs)
+
+    expected_ms = _get_phase_avg_ms(phase)
+    expected_s = expected_ms / 1000.0 if expected_ms else 0.0
 
     future = _CLI_EXECUTOR.submit(func, *args, **kwargs)
 
