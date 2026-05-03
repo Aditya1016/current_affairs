@@ -10,6 +10,7 @@ DEFAULT_UI_CONFIG = {
     "accent_color": "bright_cyan",
     "panel_color": "cyan",
     "show_tips": True,
+    "show_timers": True,
 }
 
 

@@ -10,12 +10,14 @@ class TestDefaultUiConfig:
         assert "accent_color" in DEFAULT_UI_CONFIG
         assert "panel_color" in DEFAULT_UI_CONFIG
         assert "show_tips" in DEFAULT_UI_CONFIG
+        assert "show_timers" in DEFAULT_UI_CONFIG
 
     def test_assistant_name_default(self):
         assert DEFAULT_UI_CONFIG["assistant_name"] == "friday"
 
     def test_show_tips_is_bool(self):
         assert isinstance(DEFAULT_UI_CONFIG["show_tips"], bool)
+        assert isinstance(DEFAULT_UI_CONFIG["show_timers"], bool)
 
 
 class TestLoadSaveUiConfig:
@@ -53,12 +55,14 @@ class TestLoadSaveUiConfig:
             "accent_color": "red",
             "panel_color": "blue",
             "show_tips": False,
+            "show_timers": False,
         }
         save_ui_config(custom)
         loaded = load_ui_config()
         assert loaded["assistant_name"] == "jarvis"
         assert loaded["accent_color"] == "red"
         assert loaded["show_tips"] is False
+        assert loaded["show_timers"] is False
 
     def test_load_ignores_unknown_keys(self, tmp_path, monkeypatch):
         import app.ui_config as uic_mod
