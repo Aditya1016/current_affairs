@@ -39,16 +39,24 @@ app = FastAPI(title="Current Affairs Backend", version="0.1.0")
 async def record_request_timing(request, call_next):
     """Middleware to record request duration for observability."""
     start = perf_counter()
-    response = await call_next(request)
-    elapsed_ms = (perf_counter() - start) * 1000.0
+    response = None
     try:
+        response = await call_next(request)
+        return response
+    finally:
+        elapsed_ms = (perf_counter() - start) * 1000.0
         # use the path as phase label, normalize slashes -> dots
         path = request.url.path.strip("/") or "root"
         phase = f"http.{path.replace('/', '.')}"
-        await run_in_threadpool(storage.save_phase_metric, phase=phase, duration_ms=elapsed_ms)
-    except Exception:
-        _log.debug("Failed to record request timing for %s", request.url.path, exc_info=True)
-    return response
+        try:
+            await run_in_threadpool(
+                storage.save_phase_metric,
+                phase=phase,
+                duration_ms=elapsed_ms,
+                meta={"status_code": getattr(response, "status_code", None)},
+            )
+        except Exception:
+            _log.debug("Failed to record request timing for %s", request.url.path, exc_info=True)
 
 
 @app.get("/health")
