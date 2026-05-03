@@ -93,6 +93,7 @@ HELP_TEXT = """
     config set accent bright_cyan   (change color theme)
     config set panel purple         (change panel color)
     config set tips true|false      (show/hide tips)
+    config set show_timers true|false (show/hide timer panels and loaders)
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -243,7 +244,7 @@ def _box_print(content, title: str = None, style: str = None) -> None:
 def _handle_config_command(raw: str, ui: dict) -> bool:
     parts = shlex.split(raw)
     if len(parts) < 2:
-        console.print("Usage: config show | config set <name|accent|panel|tips> <value>")
+        console.print("Usage: config show | config set <name|accent|panel|tips|show_timers> <value>")
         return True
 
     if parts[1] == "show":
@@ -266,15 +267,17 @@ def _handle_config_command(raw: str, ui: dict) -> bool:
             ui["panel_color"] = value or "cyan"
         elif key == "tips":
             ui["show_tips"] = value.lower() in {"1", "true", "yes", "on"}
+        elif key == "show_timers" or key == "timers":
+            ui["show_timers"] = value.lower() in {"1", "true", "yes", "on"}
         else:
-            console.print("Unknown config key. Use: name, accent, panel, tips")
+            console.print("Unknown config key. Use: name, accent, panel, tips, show_timers")
             return True
 
         save_ui_config(ui)
         console.print("UI config updated.")
         return True
 
-    console.print("Usage: config show | config set <name|accent|panel|tips> <value>")
+    console.print("Usage: config show | config set <name|accent|panel|tips|show_timers> <value>")
     return True
 
 
