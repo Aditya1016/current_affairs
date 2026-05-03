@@ -94,3 +94,17 @@ class TestLoadSaveUiConfig:
         cfg_path.write_text("NOT VALID JSON!!!", encoding="utf-8")
         loaded = load_ui_config()
         assert loaded["assistant_name"] == DEFAULT_UI_CONFIG["assistant_name"]
+
+    def test_load_returns_defaults_on_non_utf8_file(self, tmp_path, monkeypatch):
+        import app.ui_config as uic_mod
+
+        class _FakeCfg:
+            data_dir = str(tmp_path)
+
+        monkeypatch.setattr(uic_mod, "settings", _FakeCfg())
+
+        # Write raw bytes that are not valid UTF-8
+        cfg_path = tmp_path / "ui_config.json"
+        cfg_path.write_bytes(b"\xff\xfe invalid utf-8 \x80\x81")
+        loaded = load_ui_config()
+        assert loaded["assistant_name"] == DEFAULT_UI_CONFIG["assistant_name"]

@@ -38,7 +38,7 @@ def load_ui_config() -> Dict[str, object]:
             if k in data:
                 merged[k] = data[k]
         return merged
-    except (json.JSONDecodeError, OSError):
+    except (json.JSONDecodeError, OSError, UnicodeDecodeError):
         return dict(DEFAULT_UI_CONFIG)
 
 
