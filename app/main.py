@@ -2,6 +2,7 @@ import logging
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import HTMLResponse
+from starlette.concurrency import run_in_threadpool
 
 from .config import settings
 from .benchmark import run_model_benchmark
@@ -27,9 +28,38 @@ from .service import word_of_day_service
 from .service import WordNotFoundError
 from .service import get_latest_digest_snapshot
 from .trending import detect_trending_topics, get_trending_by_category
+from time import perf_counter
+from .storage import storage
 
 _log = logging.getLogger(__name__)
 app = FastAPI(title="Current Affairs Backend", version="0.1.0")
+
+
+@app.middleware("http")
+async def record_request_timing(request, call_next):
+    """Middleware to record request duration for observability."""
+    start = perf_counter()
+    response = None
+    exc_type = None
+    try:
+        response = await call_next(request)
+        return response
+    except Exception as exc:
+        exc_type = type(exc).__name__
+        raise
+    finally:
+        elapsed_ms = (perf_counter() - start) * 1000.0
+        # use the path as phase label, normalize slashes -> dots
+        path = request.url.path.strip("/") or "root"
+        phase = f"http.{path.replace('/', '.')}"
+        meta = {
+            "status_code": getattr(response, "status_code", None),
+            "error": exc_type,
+        }
+        try:
+            await run_in_threadpool(storage.save_phase_metric, phase=phase, duration_ms=elapsed_ms, meta=meta)
+        except Exception:
+            _log.debug("Failed to record request timing for %s", request.url.path, exc_info=True)
 
 
 @app.get("/health")
