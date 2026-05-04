@@ -14,7 +14,10 @@ DEFAULT_UI_CONFIG = {
     "use_fast_model": False,
     "fast_model_name": "",
     "summarizer_concurrency": 2,
-    "confirmation_threshold_s": 0,
+    "confirmation_threshold_s": 10.0,
+    "auto_confirm_long_actions": False,
+    "newsapi_key": "",
+    "newsdata_key": "",
 }
 
 

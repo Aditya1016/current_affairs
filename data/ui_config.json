@@ -2,5 +2,10 @@
   "assistant_name": "friday",
   "accent_color": "bright_blue",
   "panel_color": "blue",
-  "show_tips": true
+  "show_tips": true,
+  "show_timers": true,
+  "use_fast_model": false,
+  "fast_model_name": "",
+  "summarizer_concurrency": 2,
+  "confirmation_threshold_s": 10.0
 }

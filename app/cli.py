@@ -1,5 +1,5 @@
 import shlex
-from typing import List
+from typing import Any, Dict, List, Optional
 
 from rich.console import Console
 from rich.panel import Panel
@@ -7,11 +7,12 @@ from rich.table import Table
 from rich.live import Live
 from rich.text import Text
 from time import perf_counter, sleep
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, Future
 
 from .benchmark import run_model_benchmark
 from .config import settings
 from .graph_view import build_relationship_graph
+from .storage import storage
 from .route_harness import run_route_harness
 from .schemas import DigestRequest, FetchRequest
 from .service import (
@@ -113,6 +114,7 @@ console = Console()
 
 # Thread pool for running blocking operations so the UI can remain responsive
 _CLI_EXECUTOR = ThreadPoolExecutor(max_workers=4)
+_BG_TASKS: Dict[str, Dict[str, Any]] = {}
 
 
 def _get_phase_avg_ms(phase: str) -> float:
@@ -164,6 +166,35 @@ def _format_clock_panel(elapsed_s: float, expected_s: float, label: str = "Worki
     return Panel(txt, title=label, border_style=color)
 
 
+def _confirm_long_action(expected_s: float, action_name: str = "action") -> bool:
+    """Ask user to confirm if action will take longer than threshold (default 10s).
+    Returns True to proceed, False to abort.
+    """
+    ui = load_ui_config()
+    threshold_raw = ui.get("confirmation_threshold_s", 10.0)
+    try:
+        threshold_s = float(f"{threshold_raw}") if threshold_raw is not None else 10.0
+    except (TypeError, ValueError):
+        threshold_s = 10.0
+    auto_confirm = bool(ui.get("auto_confirm_long_actions", False))
+
+    if expected_s < threshold_s:
+        return True  # Below threshold, proceed automatically
+    
+    if auto_confirm:
+        return True  # Auto-confirm enabled, proceed
+    
+    # Prompt user
+    txt = Text()
+    txt.append(f"⚠️  Expected duration: {expected_s:.1f}s\n", style="bold yellow")
+    txt.append(f"This {action_name} may take a while.\n", style="dim")
+    txt.append("\nContinue? (y/n): ", style="bold")
+    _box_print(txt, title="Confirm Action", style="yellow")
+
+    user_input = console.input("[yellow]> [/yellow]").strip().lower()
+    return user_input in {"y", "yes", "1"}
+
+
 def _show_expected_time(phase: str, title: str = "Expected Time") -> None:
     """Display the stored average duration for a given phase before running an action."""
     ui = load_ui_config()
@@ -183,9 +214,62 @@ def _show_expected_time(phase: str, title: str = "Expected Time") -> None:
         _box_print(txt, title=title)
 
 
-def _call_with_loader(func, *args, phase: str = "", label: str = "Working", **kwargs):
+def _show_phase_breakdown(prefix: str) -> None:
+    """Show expected times for sub-phases whose names contain the given prefix.
+    Useful for showing per-section expectations (e.g., digest.summarize_india).
+    """
+    ui = load_ui_config()
+    if not bool(ui.get("show_timers", True)):
+        return
+    try:
+        metrics = get_metrics_summary_service(limit=200)
+        phases = [p for p in metrics.get("phases", []) if prefix in (p.get("phase") or "")]
+        if not phases:
+            return
+        table = Table(title="Phase Breakdown")
+        table.add_column("Phase")
+        table.add_column("Avg (s)")
+        for p in phases:
+            name = p.get("phase")
+            avg_ms = float(p.get("avg_ms", 0.0) or 0.0)
+            table.add_row(str(name), f"{avg_ms/1000.0:.2f}")
+        console.print(table)
+    except Exception:
+        pass
+
+
+def _build_phase_table(prefix: str):
+    """Return a rich Table for phases matching prefix using metrics service."""
+    from rich.table import Table
+
+    table = Table(title="Phase Breakdown")
+    table.add_column("Phase")
+    table.add_column("Avg (s)")
+    try:
+        metrics = get_metrics_summary_service(limit=200)
+        phases = [p for p in metrics.get("phases", []) if prefix in (p.get("phase") or "")]
+        for p in phases:
+            name = p.get("phase")
+            avg_ms = float(p.get("avg_ms", 0.0) or 0.0)
+            table.add_row(str(name), f"{avg_ms/1000.0:.2f}")
+    except Exception:
+        pass
+    return table
+
+
+def _build_live_panel(elapsed_s: float, expected_s: float, phase_prefix: str):
+    """Build a combined renderable showing the clock panel and phase table."""
+    from rich.columns import Columns
+
+    clock = _format_clock_panel(elapsed_s, expected_s, label="Working")
+    phase_table = _build_phase_table(phase_prefix)
+    return Columns([clock, phase_table])
+
+
+def _call_with_loader(func, *args, phase: str = "", label: str = "Working", action_name: str = "", **kwargs):
     """Run func(*args, **kwargs) in a thread and show a live timer/loader until it finishes.
     Returns func result or raises exception from func.
+    If expected_s exceeds threshold, ask user for confirmation before starting.
     """
     ui = load_ui_config()
     show = bool(ui.get("show_timers", True))
@@ -197,13 +281,25 @@ def _call_with_loader(func, *args, phase: str = "", label: str = "Working", **kw
     expected_ms = _get_phase_avg_ms(phase)
     expected_s = expected_ms / 1000.0 if expected_ms else 0.0
 
+    # Ask for confirmation if action will take a long time
+    if expected_s > 0:
+        action_desc = action_name or label or "action"
+        if not _confirm_long_action(expected_s, action_desc):
+            _box_print(Text("Aborted.", style="dim red"), title="Action Cancelled")
+            return None  # User aborted
+
     future = _CLI_EXECUTOR.submit(func, *args, **kwargs)
 
     start = perf_counter()
     with Live(_format_clock_panel(0.0, expected_s, label), refresh_per_second=8, console=console) as live:
         while not future.done():
             elapsed = perf_counter() - start
-            panel = _format_clock_panel(elapsed, expected_s, label)
+            # If we have a named phase, try to show per-sub-phase breakdown live
+            try:
+                phase_prefix = phase.split(".")[0] if phase and "." in phase else phase
+                panel = _build_live_panel(elapsed, expected_s, phase_prefix) if phase_prefix else _format_clock_panel(elapsed, expected_s, label)
+            except Exception:
+                panel = _format_clock_panel(elapsed, expected_s, label)
             live.update(panel)
             sleep(0.05)
     # future done; get result or raise
@@ -238,17 +334,55 @@ def _render_banner(ui: dict) -> None:
         console.print(Panel(left, border_style=panel_color))
 
 
-def _box_print(content, title: str = None, style: str = None) -> None:
+def _box_print(content: Any, title: Optional[str] = None, style: Optional[str] = None) -> None:
     """Print content inside a Panel using current UI panel color."""
     ui = load_ui_config()
     panel_color = str(ui.get("panel_color", "cyan")) if style is None else style
     console.print(Panel(content, title=title, border_style=panel_color))
 
+def _start_bg_fetch(request: FetchRequest, ui: dict) -> str:
+    """Start a background fetch and return a task id."""
+    task_id = perf_counter().__repr__()
+    future: Future = _CLI_EXECUTOR.submit(fetch_news_service, request)
+    _BG_TASKS[task_id] = {"future": future, "started_at": perf_counter(), "request": request}
+    return task_id
+
+
+def _check_background_tasks(ui: dict) -> None:
+    """Check running background tasks and notify on completion."""
+    to_remove = []
+    for tid, meta in list(_BG_TASKS.items()):
+        fut = meta.get("future")
+        if not isinstance(fut, Future):
+            to_remove.append(tid)
+            continue
+        if fut.done():
+            try:
+                res = fut.result()
+                txt = Text()
+                txt.append("Background fetch completed.\n", style="bold green")
+                txt.append(f"Snapshot: {res.snapshot_id}\n", style="dim")
+                txt.append(f"Fetched: {res.total_fetched} items\n", style="dim")
+                txt.append(f"Sources: {res.source_breakdown}\n", style="dim")
+                _box_print(txt, title="Background Fetch")
+                # record phase metric for background completion
+                try:
+                    storage.save_phase_metric(phase="fetch.bg_completed", duration_ms=0.0, snapshot_id=res.snapshot_id, meta={"total_fetched": res.total_fetched})
+                except Exception:
+                    pass
+            except Exception as exc:
+                _box_print(Text(f"Background fetch failed: {exc}", style="red"), title="Background Fetch Error")
+            to_remove.append(tid)
+
+    for tid in to_remove:
+        _BG_TASKS.pop(tid, None)
+
 
 # Canonical set-key names shown in help/error messages (aliases like "timers" are intentionally omitted).
 _KNOWN_CONFIG_KEYS = (
-    "name, accent, panel, tips, show_timers, "
-    "use_fast_model, fast_model_name, summarizer_concurrency, confirmation_threshold_s"
+    "name, accent, panel, tips, show_timers, use_fast_model, fast_model_name, "
+    "summarizer_concurrency, confirmation_threshold_s, auto_confirm_long_actions, "
+    "newsapi_key, newsdata_key"
 )
 
 # Boolean config keys: command-key → ui-dict-key.
@@ -258,12 +392,24 @@ _BOOL_CONFIG_MAP = {
     "show_timers": "show_timers",
     "timers": "show_timers",
     "use_fast_model": "use_fast_model",
+    "auto_confirm_long_actions": "auto_confirm_long_actions",
 }
 
 # Integer config keys: command-key → ui-dict-key.
 _INT_CONFIG_MAP = {
     "summarizer_concurrency": "summarizer_concurrency",
+}
+
+# Float config keys: command-key → ui-dict-key.
+_FLOAT_CONFIG_MAP = {
     "confirmation_threshold_s": "confirmation_threshold_s",
+}
+
+# String config keys: command-key → ui-dict-key.
+_STRING_CONFIG_MAP = {
+    "fast_model_name": "fast_model_name",
+    "newsapi_key": "newsapi_key",
+    "newsdata_key": "newsdata_key",
 }
 
 
@@ -275,8 +421,8 @@ def _set_config_key(ui: dict, key: str, value: str) -> str:
         ui["accent_color"] = value or "bright_cyan"
     elif key == "panel":
         ui["panel_color"] = value or "cyan"
-    elif key == "fast_model_name":
-        ui["fast_model_name"] = value
+    elif key in _STRING_CONFIG_MAP:
+        ui[_STRING_CONFIG_MAP[key]] = value
     elif key in _BOOL_CONFIG_MAP:
         ui[_BOOL_CONFIG_MAP[key]] = value.lower() in {"1", "true", "yes", "on"}
     elif key in _INT_CONFIG_MAP:
@@ -284,6 +430,11 @@ def _set_config_key(ui: dict, key: str, value: str) -> str:
             ui[_INT_CONFIG_MAP[key]] = int(value)
         except ValueError:
             return f"{_INT_CONFIG_MAP[key]} must be an integer."
+    elif key in _FLOAT_CONFIG_MAP:
+        try:
+            ui[_FLOAT_CONFIG_MAP[key]] = float(value)
+        except ValueError:
+            return f"{_FLOAT_CONFIG_MAP[key]} must be a number."
     else:
         return f"Unknown config key. Use: {_KNOWN_CONFIG_KEYS}"
     return ""
@@ -309,6 +460,8 @@ def _handle_config_command(raw: str, ui: dict) -> bool:
         key = parts[2].lower()
         value = " ".join(parts[3:]).strip()
         err = _set_config_key(ui, key, value)
+        if err:
+            console.print(err)
         if err:
             console.print(err)
             return True
@@ -340,10 +493,14 @@ def _print_digest(snapshot_id: str = "", model: str = "", max_bullets: int = 12)
     request = DigestRequest(
         snapshot_id=snapshot_id or None,
         model=model or None,
+        use_fast_model=False,
         max_bullets=max_bullets,
     )
     _show_expected_time("digest.total", title="Expected Time")
-    response = _call_with_loader(generate_digest_service, request, phase="digest.total", label="Generating digest")
+    _show_phase_breakdown("digest")
+    response = _call_with_loader(generate_digest_service, request, phase="digest.total", label="Generating digest", action_name="digest generation")
+    if response is None:
+        return
     console.print(format_digest_text(response))
 
 
@@ -646,6 +803,8 @@ def run_cli() -> None:  # noqa: C901
         try:
             accent = str(ui.get("accent_color", "bright_cyan"))
             assistant_name = str(ui.get("assistant_name", "friday"))
+            # Check background tasks and notify before showing prompt
+            _check_background_tasks(ui)
             raw = console.input(f"\n[bold {accent}]{assistant_name}>[/] ").strip()
         except (EOFError, KeyboardInterrupt):
             console.print("\nExiting.")
@@ -698,11 +857,14 @@ def run_cli() -> None:  # noqa: C901
                 digest = _call_with_loader(
                     generate_today_india_digest_service,
                     limit_per_source=20,
-                    model=session_model or "",
+                    model=(session_model or ui.get("fast_model_name") if ui.get("use_fast_model") else session_model or ""),
                     max_bullets=12,
                     phase="digest.total",
                     label="Generating today's digest",
+                    action_name="today's digest generation",
                 )
+                if digest is None:
+                    continue
                 _box_print("Generated fresh India-only digest for today.", title="Info")
                 _box_print(format_india_digest_text(digest), title="Today's Digest")
             except Exception as exc:
@@ -738,13 +900,21 @@ def run_cli() -> None:  # noqa: C901
             if cmd == "fetch":
                 limit = _parse_int_arg(args, "--limit", 20)
                 rss_only = "--rss-only" in args
+                bg = "--bg" in args
                 _show_expected_time("fetch.total", title="Expected Time")
+                if bg:
+                    tid = _start_bg_fetch(FetchRequest(limit_per_source=limit, include_newsapi=not rss_only, include_newsdata=("--newsdata" in args)), ui)
+                    _box_print(f"Started background fetch (task id: {tid}). Use 'bg status' to view.", title="Background Fetch")
+                    continue
                 response = _call_with_loader(
                     fetch_news_service,
-                    FetchRequest(limit_per_source=limit, include_newsapi=not rss_only),
+                    FetchRequest(limit_per_source=limit, include_newsapi=not rss_only, include_newsdata=("--newsdata" in args)),
                     phase="fetch.total",
                     label="Fetching news",
+                    action_name="news fetch",
                 )
+                if response is None:
+                    continue
                 txt = Text()
                 txt.append(f"Fetched {response.total_fetched} items.\n", style="bold")
                 txt.append(f"Snapshot: {response.snapshot_id}\n", style="dim")
@@ -761,11 +931,14 @@ def run_cli() -> None:  # noqa: C901
                 _show_expected_time("pipeline.total", title="Expected Time")
                 result = _call_with_loader(
                     run_pipeline_service,
-                    FetchRequest(limit_per_source=limit, include_newsapi=not rss_only),
-                    DigestRequest(model=session_model or None),
+                        FetchRequest(limit_per_source=limit, include_newsapi=not rss_only),
+                        DigestRequest(model=session_model or None, use_fast_model=bool(ui.get("use_fast_model", False))),
                     phase="pipeline.total",
                     label="Running pipeline",
+                    action_name="pipeline execution",
                 )
+                if result is None:
+                    continue
                 txt = Text()
                 txt.append(f"Fetched {result.fetch.total_fetched} items.\n", style="bold")
                 txt.append(f"Snapshot: {result.fetch.snapshot_id}\n", style="dim")
@@ -826,7 +999,10 @@ def run_cli() -> None:  # noqa: C901
                         no_repeat_days=no_repeat_days,
                         phase="word_pack.total",
                         label="Generating word pack",
+                        action_name="word pack generation",
                     )
+                    if pack is None:
+                        continue
                     _render_word_pack(pack.dict())
                     continue
 
@@ -842,7 +1018,10 @@ def run_cli() -> None:  # noqa: C901
                     no_repeat_days=no_repeat_days,
                     phase="word_of_day.total",
                     label="Generating word of the day",
+                    action_name="word of the day",
                 )
+                if result is None:
+                    continue
                 txt = Text()
                 txt.append("Word of the day (India current affairs):\n", style="bold")
                 txt.append(f"- Word: {result.word}\n")
@@ -874,7 +1053,10 @@ def run_cli() -> None:  # noqa: C901
                     ]
                 report = run_model_benchmark(snapshot_id=snapshot_id, models=models, max_bullets=bullets)
                 console.print(f"Benchmark completed for {snapshot_id}")
-                for row in report.get("results", []):
+                results = report.get("results", [])
+                if not isinstance(results, list):
+                    results = []
+                for row in results:
                     console.print(
                         f"- {row['model']}: score={row['aggregate_score']} latency_ms={row['latency_ms']} "
                         f"india_points={row['india_points']} world_points={row['world_points']}"
@@ -936,6 +1118,7 @@ def run_cli() -> None:  # noqa: C901
                             values=values,
                             y_label="Total ms",
                         )
+                
             elif cmd == "route-test":
                 prompts_raw = _parse_arg(args, "--prompts", "")
                 if prompts_raw:
@@ -951,9 +1134,34 @@ def run_cli() -> None:  # noqa: C901
                 report = run_route_harness(prompts)
                 console.print(f"Routed {report['prompt_count']} prompts.")
                 console.print(f"Output: {report['output_file']}")
-                for specialist, count in report.get("specialist_counts", {}).items():
+                specialist_counts = report.get("specialist_counts", {})
+                if not isinstance(specialist_counts, dict):
+                    specialist_counts = {}
+                for specialist, count in specialist_counts.items():
                     if count:
                         console.print(f"- {specialist}: {count}")
+            elif cmd == "bg":
+                sub = args[0].lower() if args else "status"
+                if sub == "status":
+                    if not _BG_TASKS:
+                        console.print("No background tasks running.")
+                    else:
+                        table = Table(title="Background Tasks")
+                        table.add_column("Task ID")
+                        table.add_column("Started (s ago)")
+                        table.add_column("State")
+                        for tid, meta in _BG_TASKS.items():
+                            started = meta.get("started_at", 0)
+                            age = perf_counter() - started
+                            fut = meta.get("future")
+                            state = "running"
+                            if isinstance(fut, Future):
+                                state = "done" if fut.done() else "running"
+                            table.add_row(str(tid), f"{age:.1f}", state)
+                        console.print(table)
+                else:
+                    console.print("Usage: bg status")
+                continue
             else:
                 console.print("Unknown command. Type 'help'.")
         except Exception as exc:
