@@ -180,10 +180,10 @@ def _confirm_long_action(expected_s: float, action_name: str = "action") -> bool
 
     if expected_s < threshold_s:
         return True  # Below threshold, proceed automatically
-    
+
     if auto_confirm:
         return True  # Auto-confirm enabled, proceed
-    
+
     # Prompt user
     txt = Text()
     txt.append(f"⚠️  Expected duration: {expected_s:.1f}s\n", style="bold yellow")
@@ -297,7 +297,10 @@ def _call_with_loader(func, *args, phase: str = "", label: str = "Working", acti
             # If we have a named phase, try to show per-sub-phase breakdown live
             try:
                 phase_prefix = phase.split(".")[0] if phase and "." in phase else phase
-                panel = _build_live_panel(elapsed, expected_s, phase_prefix) if phase_prefix else _format_clock_panel(elapsed, expected_s, label)
+                if phase_prefix:
+                    panel = _build_live_panel(elapsed, expected_s, phase_prefix)
+                else:
+                    panel = _format_clock_panel(elapsed, expected_s, label)
             except Exception:
                 panel = _format_clock_panel(elapsed, expected_s, label)
             live.update(panel)
@@ -340,6 +343,7 @@ def _box_print(content: Any, title: Optional[str] = None, style: Optional[str] =
     panel_color = str(ui.get("panel_color", "cyan")) if style is None else style
     console.print(Panel(content, title=title, border_style=panel_color))
 
+
 def _start_bg_fetch(request: FetchRequest, ui: dict) -> str:
     """Start a background fetch and return a task id."""
     task_id = perf_counter().__repr__()
@@ -367,7 +371,12 @@ def _check_background_tasks(ui: dict) -> None:
                 _box_print(txt, title="Background Fetch")
                 # record phase metric for background completion
                 try:
-                    storage.save_phase_metric(phase="fetch.bg_completed", duration_ms=0.0, snapshot_id=res.snapshot_id, meta={"total_fetched": res.total_fetched})
+                    storage.save_phase_metric(
+                        phase="fetch.bg_completed",
+                        duration_ms=0.0,
+                        snapshot_id=res.snapshot_id,
+                        meta={"total_fetched": res.total_fetched},
+                    )
                 except Exception:
                     pass
             except Exception as exc:
@@ -381,9 +390,15 @@ def _check_background_tasks(ui: dict) -> None:
 # Canonical set-key names shown in help/error messages (aliases like "timers" are intentionally omitted).
 _KNOWN_CONFIG_KEYS = (
     "name, accent, panel, tips, show_timers, use_fast_model, fast_model_name, "
-    "summarizer_concurrency, confirmation_threshold_s, auto_confirm_long_actions, "
-    "newsapi_key, newsdata_key"
+    "summarizer_concurrency, confirmation_threshold_s, auto_confirm_long_actions"
 )
+
+# Aliases that map a short command key to a (ui_dict_key, default_value) pair.
+_ALIAS_CONFIG_MAP = {
+    "name": ("assistant_name", "friday"),
+    "accent": ("accent_color", "bright_cyan"),
+    "panel": ("panel_color", "cyan"),
+}
 
 # Boolean config keys: command-key → ui-dict-key.
 # "timers" is an undocumented alias for "show_timers" kept for backward compatibility.
@@ -408,19 +423,14 @@ _FLOAT_CONFIG_MAP = {
 # String config keys: command-key → ui-dict-key.
 _STRING_CONFIG_MAP = {
     "fast_model_name": "fast_model_name",
-    "newsapi_key": "newsapi_key",
-    "newsdata_key": "newsdata_key",
 }
 
 
 def _set_config_key(ui: dict, key: str, value: str) -> str:
     """Apply key=value to ui dict. Returns an error message on failure or empty string on success."""
-    if key == "name":
-        ui["assistant_name"] = value or "friday"
-    elif key == "accent":
-        ui["accent_color"] = value or "bright_cyan"
-    elif key == "panel":
-        ui["panel_color"] = value or "cyan"
+    if key in _ALIAS_CONFIG_MAP:
+        ui_key, default = _ALIAS_CONFIG_MAP[key]
+        ui[ui_key] = value or default
     elif key in _STRING_CONFIG_MAP:
         ui[_STRING_CONFIG_MAP[key]] = value
     elif key in _BOOL_CONFIG_MAP:
@@ -487,16 +497,24 @@ def _parse_int_arg(args: List[str], name: str, default: int) -> int:
         return default
 
 
-def _print_digest(snapshot_id: str = "", model: str = "", max_bullets: int = 12) -> None:
+def _print_digest(
+    snapshot_id: str = "", model: str = "", max_bullets: int = 12, use_fast_model: bool = False
+) -> None:
     request = DigestRequest(
         snapshot_id=snapshot_id or None,
         model=model or None,
-        use_fast_model=False,
+        use_fast_model=use_fast_model,
         max_bullets=max_bullets,
     )
     _show_expected_time("digest.total", title="Expected Time")
     _show_phase_breakdown("digest")
-    response = _call_with_loader(generate_digest_service, request, phase="digest.total", label="Generating digest", action_name="digest generation")
+    response = _call_with_loader(
+        generate_digest_service,
+        request,
+        phase="digest.total",
+        label="Generating digest",
+        action_name="digest generation",
+    )
     if response is None:
         return
     console.print(format_digest_text(response))
@@ -885,7 +903,7 @@ def run_cli() -> None:  # noqa: C901
 
         if lower in {"agenda", "today agenda", "what is agenda", "what's agenda"}:
             try:
-                _print_digest(model=session_model)
+                _print_digest(model=session_model, use_fast_model=bool(ui.get("use_fast_model", False)))
             except Exception as exc:
                 console.print(f"Error: {exc}")
             continue
@@ -899,14 +917,27 @@ def run_cli() -> None:  # noqa: C901
                 limit = _parse_int_arg(args, "--limit", 20)
                 rss_only = "--rss-only" in args
                 bg = "--bg" in args
+                include_newsdata = "--newsdata" in args
                 _show_expected_time("fetch.total", title="Expected Time")
                 if bg:
-                    tid = _start_bg_fetch(FetchRequest(limit_per_source=limit, include_newsapi=not rss_only, include_newsdata=("--newsdata" in args)), ui)
-                    _box_print(f"Started background fetch (task id: {tid}). Use 'bg status' to view.", title="Background Fetch")
+                    fetch_req = FetchRequest(
+                        limit_per_source=limit,
+                        include_newsapi=not rss_only,
+                        include_newsdata=include_newsdata,
+                    )
+                    tid = _start_bg_fetch(fetch_req, ui)
+                    _box_print(
+                        f"Started background fetch (task id: {tid}). Use 'bg status' to view.",
+                        title="Background Fetch",
+                    )
                     continue
                 response = _call_with_loader(
                     fetch_news_service,
-                    FetchRequest(limit_per_source=limit, include_newsapi=not rss_only, include_newsdata=("--newsdata" in args)),
+                    FetchRequest(
+                        limit_per_source=limit,
+                        include_newsapi=not rss_only,
+                        include_newsdata=include_newsdata,
+                    ),
                     phase="fetch.total",
                     label="Fetching news",
                     action_name="news fetch",
@@ -922,15 +953,20 @@ def run_cli() -> None:  # noqa: C901
                 snapshot_id = _parse_arg(args, "--snapshot", "")
                 model = _parse_arg(args, "--model", session_model)
                 bullets = _parse_int_arg(args, "--bullets", 12)
-                _print_digest(snapshot_id=snapshot_id, model=model, max_bullets=bullets)
+                _print_digest(
+                    snapshot_id=snapshot_id,
+                    model=model,
+                    max_bullets=bullets,
+                    use_fast_model=bool(ui.get("use_fast_model", False)),
+                )
             elif cmd == "pipeline":
                 limit = _parse_int_arg(args, "--limit", 20)
                 rss_only = "--rss-only" in args
                 _show_expected_time("pipeline.total", title="Expected Time")
                 result = _call_with_loader(
                     run_pipeline_service,
-                        FetchRequest(limit_per_source=limit, include_newsapi=not rss_only),
-                        DigestRequest(model=session_model or None, use_fast_model=bool(ui.get("use_fast_model", False))),
+                    FetchRequest(limit_per_source=limit, include_newsapi=not rss_only),
+                    DigestRequest(model=session_model or None, use_fast_model=bool(ui.get("use_fast_model", False))),
                     phase="pipeline.total",
                     label="Running pipeline",
                     action_name="pipeline execution",
