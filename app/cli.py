@@ -462,8 +462,6 @@ def _handle_config_command(raw: str, ui: dict) -> bool:
         err = _set_config_key(ui, key, value)
         if err:
             console.print(err)
-        if err:
-            console.print(err)
             return True
         save_ui_config(ui)
         console.print("UI config updated.")
