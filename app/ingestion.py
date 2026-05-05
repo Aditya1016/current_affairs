@@ -111,11 +111,15 @@ def fetch_newsdata(limit_per_source: int) -> List[NewsItem]:
             if next_page:
                 params["page"] = next_page
 
-            _log.info("fetch_newsdata: requesting %s params=%s", url, _mask_params(params))
-            resp = requests.get(url, params=params, timeout=20)
-            _log.info("fetch_newsdata: response status=%s", resp.status_code)
-            resp.raise_for_status()
-            payload = resp.json()
+            try:
+                _log.info("fetch_newsdata: requesting %s params=%s", url, _mask_params(params))
+                resp = requests.get(url, params=params, timeout=20)
+                _log.info("fetch_newsdata: response status=%s", resp.status_code)
+                resp.raise_for_status()
+                payload = resp.json()
+            except Exception:
+                _log.exception("fetch_newsdata: request failed on page=%s, returning collected items", next_page)
+                break
             _log.debug("fetch_newsdata: payload keys=%s", list(payload.keys()) if isinstance(payload, dict) else type(payload))
 
             results = payload.get("results", [])
@@ -151,8 +155,7 @@ def fetch_newsdata(limit_per_source: int) -> List[NewsItem]:
             if not next_page:
                 break
     except Exception:
-        _log.exception("fetch_newsdata failed")
-        return []
+        _log.exception("fetch_newsdata: unexpected error, returning collected items")
 
     return all_items
 

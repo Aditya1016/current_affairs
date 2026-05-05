@@ -397,7 +397,7 @@ def _check_background_tasks(ui: dict) -> None:
 # Canonical set-key names shown in help/error messages (aliases like "timers" are intentionally omitted).
 _KNOWN_CONFIG_KEYS = (
     "name, accent, panel, tips, show_timers, use_fast_model, fast_model_name, "
-    "summarizer_concurrency, confirmation_threshold_s, auto_confirm_long_actions, newsdata_key"
+    "summarizer_concurrency, confirmation_threshold_s, auto_confirm_long_actions"
 )
 
 # Aliases that map a short command key to a (ui_dict_key, default_value) pair.
@@ -430,7 +430,6 @@ _FLOAT_CONFIG_MAP = {
 # String config keys: command-key → ui-dict-key.
 _STRING_CONFIG_MAP = {
     "fast_model_name": "fast_model_name",
-    "newsdata_key": "newsdata_key",
 }
 
 
@@ -1069,6 +1068,9 @@ def run_cli() -> None:  # noqa: C901
                     ui["use_fast_model"] = False
                     save_ui_config(ui)
                     _box_print(Text("Disabled speed mode. Restored normal digest behavior."), title="Speed Mode")
+                    continue
+                else:
+                    _box_print(Text(f"Unknown speed subcommand: {sub}. Usage: speed [status|on|off]"), title="Speed Mode")
                     continue
             elif cmd == "pipeline":
                 limit = _parse_int_arg(args, "--limit", 20)
