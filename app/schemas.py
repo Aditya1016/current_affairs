@@ -15,6 +15,7 @@ class NewsItem(BaseModel):
 class FetchRequest(BaseModel):
     limit_per_source: int = Field(default=25, ge=5, le=100)
     include_newsapi: bool = True
+    include_newsdata: bool = False
     rss_feeds: Optional[List[str]] = None
 
 
@@ -27,7 +28,9 @@ class FetchResponse(BaseModel):
 class DigestRequest(BaseModel):
     snapshot_id: Optional[str] = None
     model: Optional[str] = None
+    use_fast_model: bool = False
     max_bullets: int = Field(default=12, ge=6, le=20)
+    concurrency: Optional[int] = None
 
 
 class DigestPoint(BaseModel):

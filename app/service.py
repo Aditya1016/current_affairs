@@ -157,6 +157,7 @@ def fetch_news_service(request: FetchRequest) -> FetchResponse:
     items, source_breakdown = fetch_all_news(
         limit_per_source=request.limit_per_source,
         include_newsapi=request.include_newsapi,
+        include_newsdata=getattr(request, "include_newsdata", False),
         rss_feeds=feeds,
     )
     storage.save_phase_metric(
@@ -225,27 +226,55 @@ def generate_digest_service(request: DigestRequest) -> DigestResponse:
         meta={"raw_items": len(raw_items), "deduped_items": len(deduped), "ranked_items": len(ranked)},
     )
 
-    model = request.model or settings.ollama_model
+    # Respect request.use_fast_model to choose a lower-latency model if requested
+    if getattr(request, "use_fast_model", False):
+        model = request.model or getattr(settings, "fast_ollama_model", settings.ollama_model)
+    else:
+        model = request.model or settings.ollama_model
     india_candidates = grouped["india"][: settings.summarizer_max_items_per_section]
     world_candidates = grouped["world"][: settings.summarizer_max_items_per_section]
 
-    india_start = perf_counter()
-    india_points: List[DigestPoint] = summarize_section(india_candidates, request.max_bullets, model)
-    storage.save_phase_metric(
-        phase="digest.summarize_india",
-        duration_ms=_elapsed_ms(india_start),
-        snapshot_id=snapshot_id,
-        meta={"input_items": len(india_candidates), "output_points": len(india_points)},
-    )
+    # Parallelize summarization across sections (india/world) to reduce latency.
+    from concurrent.futures import ThreadPoolExecutor, as_completed
 
-    world_start = perf_counter()
-    world_points: List[DigestPoint] = summarize_section(world_candidates, request.max_bullets, model)
-    storage.save_phase_metric(
-        phase="digest.summarize_world",
-        duration_ms=_elapsed_ms(world_start),
-        snapshot_id=snapshot_id,
-        meta={"input_items": len(world_candidates), "output_points": len(world_points)},
-    )
+    def _run_summarize(sec_items: List[NewsItem]):
+        start = perf_counter()
+        pts = summarize_section(sec_items, request.max_bullets, model)
+        return pts, _elapsed_ms(start)
+
+    india_points: List[DigestPoint] = []
+    world_points: List[DigestPoint] = []
+
+    max_workers = max(1, int(request.concurrency or getattr(settings, "summarizer_concurrency", 2)))
+    futures = {}
+    with ThreadPoolExecutor(max_workers=max_workers) as ex:
+        futures[ex.submit(_run_summarize, india_candidates)] = "india"
+        futures[ex.submit(_run_summarize, world_candidates)] = "world"
+
+        for fut in as_completed(futures):
+            section = futures[fut]
+            try:
+                pts, duration_ms = fut.result()
+            except Exception as exc:
+                _log.warning("Summarization failed for section %s: %s", section, exc, exc_info=True)
+                pts, duration_ms = ([], 0.0)
+
+            if section == "india":
+                india_points = pts
+                storage.save_phase_metric(
+                    phase="digest.summarize_india",
+                    duration_ms=duration_ms,
+                    snapshot_id=snapshot_id,
+                    meta={"input_items": len(india_candidates), "output_points": len(india_points)},
+                )
+            else:
+                world_points = pts
+                storage.save_phase_metric(
+                    phase="digest.summarize_world",
+                    duration_ms=duration_ms,
+                    snapshot_id=snapshot_id,
+                    meta={"input_items": len(world_candidates), "output_points": len(world_points)},
+                )
 
     response = DigestResponse(
         snapshot_id=snapshot_id,
@@ -277,7 +306,13 @@ def run_pipeline_service(fetch_request: FetchRequest, digest_request: Optional[D
     fetch_result = fetch_news_service(fetch_request)
     digest_seed = digest_request or DigestRequest()
     digest_result = generate_digest_service(
-        DigestRequest(snapshot_id=fetch_result.snapshot_id, model=digest_seed.model, max_bullets=digest_seed.max_bullets)
+        DigestRequest(
+            snapshot_id=fetch_result.snapshot_id,
+            model=digest_seed.model,
+            use_fast_model=digest_seed.use_fast_model,
+            max_bullets=digest_seed.max_bullets,
+            concurrency=digest_seed.concurrency,
+        )
     )
     storage.save_phase_metric(
         phase="pipeline.total",
