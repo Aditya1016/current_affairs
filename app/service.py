@@ -245,7 +245,7 @@ def generate_digest_service(request: DigestRequest) -> DigestResponse:
     india_points: List[DigestPoint] = []
     world_points: List[DigestPoint] = []
 
-    max_workers = max(1, int(getattr(settings, "summarizer_concurrency", 2)))
+    max_workers = max(1, int(request.concurrency or getattr(settings, "summarizer_concurrency", 2)))
     futures = {}
     with ThreadPoolExecutor(max_workers=max_workers) as ex:
         futures[ex.submit(_run_summarize, india_candidates)] = "india"
@@ -255,7 +255,8 @@ def generate_digest_service(request: DigestRequest) -> DigestResponse:
             section = futures[fut]
             try:
                 pts, duration_ms = fut.result()
-            except Exception:
+            except Exception as exc:
+                _log.warning("Summarization failed for section %s: %s", section, exc, exc_info=True)
                 pts, duration_ms = ([], 0.0)
 
             if section == "india":
@@ -305,7 +306,13 @@ def run_pipeline_service(fetch_request: FetchRequest, digest_request: Optional[D
     fetch_result = fetch_news_service(fetch_request)
     digest_seed = digest_request or DigestRequest()
     digest_result = generate_digest_service(
-        DigestRequest(snapshot_id=fetch_result.snapshot_id, model=digest_seed.model, max_bullets=digest_seed.max_bullets)
+        DigestRequest(
+            snapshot_id=fetch_result.snapshot_id,
+            model=digest_seed.model,
+            use_fast_model=digest_seed.use_fast_model,
+            max_bullets=digest_seed.max_bullets,
+            concurrency=digest_seed.concurrency,
+        )
     )
     storage.save_phase_metric(
         phase="pipeline.total",

@@ -1,4 +1,5 @@
 import shlex
+import uuid
 from typing import Any, Dict, List, Optional
 
 from rich.console import Console
@@ -346,7 +347,7 @@ def _box_print(content: Any, title: Optional[str] = None, style: Optional[str] =
 
 def _start_bg_fetch(request: FetchRequest, ui: dict) -> str:
     """Start a background fetch and return a task id."""
-    task_id = perf_counter().__repr__()
+    task_id = str(uuid.uuid4())[:8]
     future: Future = _CLI_EXECUTOR.submit(fetch_news_service, request)
     _BG_TASKS[task_id] = {"future": future, "started_at": perf_counter(), "request": request}
     return task_id
@@ -498,13 +499,15 @@ def _parse_int_arg(args: List[str], name: str, default: int) -> int:
 
 
 def _print_digest(
-    snapshot_id: str = "", model: str = "", max_bullets: int = 12, use_fast_model: bool = False
+    snapshot_id: str = "", model: str = "", max_bullets: int = 12,
+    use_fast_model: bool = False, concurrency: Optional[int] = None
 ) -> None:
     request = DigestRequest(
         snapshot_id=snapshot_id or None,
         model=model or None,
         use_fast_model=use_fast_model,
         max_bullets=max_bullets,
+        concurrency=concurrency,
     )
     _show_expected_time("digest.total", title="Expected Time")
     _show_phase_breakdown("digest")
@@ -870,10 +873,16 @@ def run_cli() -> None:  # noqa: C901
         if lower in {"news today", "whats the news for today", "what's the news for today", "news", "today news"}:
             try:
                 _show_expected_time("digest.today_india.total", title="Expected Time")
+                use_fast = bool(ui.get("use_fast_model", False))
+                if use_fast:
+                    fast_name = str(ui.get("fast_model_name", "") or "").strip()
+                    today_model = session_model or fast_name or settings.fast_ollama_model
+                else:
+                    today_model = session_model or ""
                 digest = _call_with_loader(
                     generate_today_india_digest_service,
                     limit_per_source=20,
-                    model=(session_model or ui.get("fast_model_name") if ui.get("use_fast_model") else session_model or ""),
+                    model=today_model,
                     max_bullets=12,
                     phase="digest.total",
                     label="Generating today's digest",
@@ -903,7 +912,12 @@ def run_cli() -> None:  # noqa: C901
 
         if lower in {"agenda", "today agenda", "what is agenda", "what's agenda"}:
             try:
-                _print_digest(model=session_model, use_fast_model=bool(ui.get("use_fast_model", False)))
+                ui_concurrency = int(ui.get("summarizer_concurrency", 2) or 2)
+                _print_digest(
+                    model=session_model,
+                    use_fast_model=bool(ui.get("use_fast_model", False)),
+                    concurrency=ui_concurrency,
+                )
             except Exception as exc:
                 console.print(f"Error: {exc}")
             continue
@@ -953,20 +967,27 @@ def run_cli() -> None:  # noqa: C901
                 snapshot_id = _parse_arg(args, "--snapshot", "")
                 model = _parse_arg(args, "--model", session_model)
                 bullets = _parse_int_arg(args, "--bullets", 12)
+                ui_concurrency = int(ui.get("summarizer_concurrency", 2) or 2)
                 _print_digest(
                     snapshot_id=snapshot_id,
                     model=model,
                     max_bullets=bullets,
                     use_fast_model=bool(ui.get("use_fast_model", False)),
+                    concurrency=ui_concurrency,
                 )
             elif cmd == "pipeline":
                 limit = _parse_int_arg(args, "--limit", 20)
                 rss_only = "--rss-only" in args
+                ui_concurrency = int(ui.get("summarizer_concurrency", 2) or 2)
                 _show_expected_time("pipeline.total", title="Expected Time")
                 result = _call_with_loader(
                     run_pipeline_service,
                     FetchRequest(limit_per_source=limit, include_newsapi=not rss_only),
-                    DigestRequest(model=session_model or None, use_fast_model=bool(ui.get("use_fast_model", False))),
+                    DigestRequest(
+                        model=session_model or None,
+                        use_fast_model=bool(ui.get("use_fast_model", False)),
+                        concurrency=ui_concurrency,
+                    ),
                     phase="pipeline.total",
                     label="Running pipeline",
                     action_name="pipeline execution",
@@ -1152,7 +1173,7 @@ def run_cli() -> None:  # noqa: C901
                             values=values,
                             y_label="Total ms",
                         )
-                
+
             elif cmd == "route-test":
                 prompts_raw = _parse_arg(args, "--prompts", "")
                 if prompts_raw:

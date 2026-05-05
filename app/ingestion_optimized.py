@@ -240,7 +240,7 @@ def fetch_all_news_threaded(
 
 # Keep backward compatibility with original function name
 def fetch_all_news(
-    limit_per_source: int, include_newsapi: bool, rss_feeds: List[str]
+    limit_per_source: int, include_newsapi: bool, rss_feeds: List[str], include_newsdata: bool = False
 ) -> Tuple[List[NewsItem], Dict[str, int]]:
     """Backward compatible wrapper that uses threaded version."""
     return fetch_all_news_threaded(limit_per_source, include_newsapi, rss_feeds)

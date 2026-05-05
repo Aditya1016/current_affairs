@@ -16,6 +16,8 @@ def test_build_phase_table(monkeypatch):
     pytest.importorskip("rich")
     import app.cli as cli
     from rich.table import Table
+    from io import StringIO
+    from rich.console import Console
 
     def fake_metrics(limit=200):
         return {
@@ -29,6 +31,13 @@ def test_build_phase_table(monkeypatch):
     monkeypatch.setattr(cli, "get_metrics_summary_service", fake_metrics)
     table = cli._build_phase_table("digest")
     assert isinstance(table, Table)
-    # Expect two rows for digest.* phases
-    # Rich Table doesn't expose rows publicly, but len(table.columns) should be 2
+    # Render to string and verify only digest.* rows appear (other.phase must be absent)
+    buf = StringIO()
+    c = Console(file=buf, no_color=True, width=120)
+    c.print(table)
+    rendered = buf.getvalue()
+    assert "digest.summarize_india" in rendered
+    assert "digest.summarize_world" in rendered
+    assert "other.phase" not in rendered
+    # Also confirm exactly 2 data columns
     assert len(table.columns) == 2

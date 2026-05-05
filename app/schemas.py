@@ -30,6 +30,7 @@ class DigestRequest(BaseModel):
     model: Optional[str] = None
     use_fast_model: bool = False
     max_bullets: int = Field(default=12, ge=6, le=20)
+    concurrency: Optional[int] = None
 
 
 class DigestPoint(BaseModel):
