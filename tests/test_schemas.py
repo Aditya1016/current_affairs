@@ -58,13 +58,13 @@ class TestFetchRequest:
     def test_defaults(self):
         req = FetchRequest()
         assert req.limit_per_source == 25
-        assert req.include_newsapi is True
+        assert req.include_newsdata is True
         assert req.rss_feeds is None
 
     def test_custom(self):
-        req = FetchRequest(limit_per_source=10, include_newsapi=False)
+        req = FetchRequest(limit_per_source=10, include_newsdata=False)
         assert req.limit_per_source == 10
-        assert req.include_newsapi is False
+        assert req.include_newsdata is False
 
     def test_limit_below_minimum_raises(self):
         with pytest.raises(ValidationError):

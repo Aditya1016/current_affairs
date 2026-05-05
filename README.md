@@ -1,6 +1,6 @@
 # Current Affairs Backend
 
-Local FastAPI backend for India-first current affairs digest generation using NewsAPI + RSS + Ollama.
+Local FastAPI backend for India-first current affairs digest generation using NewsData + RSS + Ollama.
 
 You can run this project in two modes:
 
@@ -9,7 +9,7 @@ You can run this project in two modes:
 
 ## Features (Phase 1)
 
-- Fetches headlines from NewsAPI and RSS feeds
+- Fetches headlines from NewsData and RSS feeds
 - Normalizes and deduplicates overlapping headlines
 - Ranks and groups stories into India and World buckets
 - Generates concise English-only digest using local Ollama model
@@ -31,7 +31,7 @@ You can run this project in two modes:
    copy .env.example .env
    ```
 
-4. Optionally set `NEWSAPI_KEY` in `.env`.
+4. Optionally set `NEWSDATA_KEY` in `.env`.
 5. Start API (optional):
 
    ```bash
@@ -56,7 +56,7 @@ You can run this project in two modes:
 - `word today --level exam --no-repeat 14` : fetch fresh India news and print a vocabulary word by difficulty (`easy|balanced|exam`) while avoiding repeats
 - `word pack --count 5 --level balanced --no-repeat 14` : generate a unique vocabulary pack from today's India news
 - `agenda` : summarize latest stored snapshot
-- `fetch --rss-only --limit 20` : fetch without NewsAPI
+- `fetch --rss-only --limit 20` : fetch without NewsData
 - `digest --snapshot <id> --model qwen3.5:9b --bullets 12`
 - `pipeline --rss-only --limit 20` : fetch + digest in one command
 - `search "india semiconductor" --days 30 --limit 20 --plot --plot-by source` : search indexed stories and optionally show distribution chart
@@ -129,7 +129,7 @@ See the CLI-focused improvements and UX notes: [docs/cli_optimization.md](docs/c
 Fetch news:
 
 ```bash
-curl -X POST http://127.0.0.1:8000/fetch-news -H "Content-Type: application/json" -d "{\"limit_per_source\": 20, \"include_newsapi\": true}"
+curl -X POST http://127.0.0.1:8000/fetch-news -H "Content-Type: application/json" -d "{\"limit_per_source\": 20, \"include_newsdata\": true}"
 ```
 
 Generate digest from latest snapshot:
@@ -170,4 +170,4 @@ curl -X POST http://127.0.0.1:8000/benchmark-models -H "Content-Type: applicatio
 ## Notes
 
 - Dockerization is intentionally deferred to the final stage.
-- If `NEWSAPI_KEY` is not set, RSS ingestion still works.
+- If `NEWSDATA_KEY` is not set, RSS ingestion still works.

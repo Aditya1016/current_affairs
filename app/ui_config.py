@@ -16,6 +16,11 @@ DEFAULT_UI_CONFIG = {
     "summarizer_concurrency": 2,
     "confirmation_threshold_s": 10.0,
     "auto_confirm_long_actions": False,
+    "newsdata_key": "",
+    # Speed mode preset: when enabled, CLI uses a faster model and tighter limits
+    "speed_mode": False,
+    "speed_max_bullets": 6,
+    "speed_items_per_section": 12,
 }
 
 

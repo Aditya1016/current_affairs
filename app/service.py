@@ -156,8 +156,7 @@ def fetch_news_service(request: FetchRequest) -> FetchResponse:
     sources_start = perf_counter()
     items, source_breakdown = fetch_all_news(
         limit_per_source=request.limit_per_source,
-        include_newsapi=request.include_newsapi,
-        include_newsdata=getattr(request, "include_newsdata", False),
+        include_newsdata=getattr(request, "include_newsdata", True),
         rss_feeds=feeds,
     )
     storage.save_phase_metric(
@@ -165,7 +164,7 @@ def fetch_news_service(request: FetchRequest) -> FetchResponse:
         duration_ms=_elapsed_ms(sources_start),
         meta={
             "limit_per_source": request.limit_per_source,
-            "include_newsapi": request.include_newsapi,
+            "include_newsdata": getattr(request, "include_newsdata", True),
             "rss_feed_count": len(feeds),
         },
     )
@@ -176,7 +175,7 @@ def fetch_news_service(request: FetchRequest) -> FetchResponse:
             duration_ms=_elapsed_ms(fetch_total_start),
             meta={"total_fetched": 0},
         )
-        raise RuntimeError("No news items fetched. Check NEWSAPI key and RSS feed availability.")
+        raise RuntimeError("No news items fetched. Check NEWSDATA key and RSS feed availability.")
 
     snapshot_payload = {
         "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -620,7 +619,7 @@ def word_of_day_service(
     fetch_result = fetch_news_service(
         FetchRequest(
             limit_per_source=limit_per_source,
-            include_newsapi=bool(settings.newsapi_key),
+            include_newsdata=True,
         )
     )
     snapshot_data = storage.load_raw(fetch_result.snapshot_id)
@@ -677,7 +676,7 @@ def word_pack_service(
     fetch_result = fetch_news_service(
         FetchRequest(
             limit_per_source=limit_per_source,
-            include_newsapi=bool(settings.newsapi_key),
+            include_newsdata=True,
         )
     )
     snapshot_data = storage.load_raw(fetch_result.snapshot_id)
@@ -722,7 +721,7 @@ def generate_today_india_digest_service(limit_per_source: int = 20, model: str =
     fetch_result = fetch_news_service(
         FetchRequest(
             limit_per_source=limit_per_source,
-            include_newsapi=bool(settings.newsapi_key),
+            include_newsdata=True,
         )
     )
 

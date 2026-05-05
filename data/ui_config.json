@@ -1,11 +1,16 @@
 {
   "assistant_name": "friday",
-  "accent_color": "bright_blue",
-  "panel_color": "blue",
+  "accent_color": "bright_cyan",
+  "panel_color": "cyan",
   "show_tips": true,
   "show_timers": true,
   "use_fast_model": false,
   "fast_model_name": "",
   "summarizer_concurrency": 2,
-  "confirmation_threshold_s": 10.0
+  "confirmation_threshold_s": 10.0,
+  "auto_confirm_long_actions": false,
+  "newsdata_key": "",
+  "speed_mode": false,
+  "speed_max_bullets": 6,
+  "speed_items_per_section": 12
 }
