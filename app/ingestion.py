@@ -65,9 +65,7 @@ def _category_from_text(title: str, source: str) -> str:
 
 
 def _resolve_newsdata_key() -> str:
-    """Resolve the NewsData.io API key from env settings or as a pub_ fallback from NEWSAPI_KEY.
-    Prefer `settings.newsdata_key` but allow an interactive UI-config fallback.
-    """
+    """Resolve the NewsData.io API key from env settings or as a pub_ fallback from NEWSAPI_KEY."""
     key = getattr(settings, "newsdata_key", "") or ""
     key = str(key).strip()
     if not key:
@@ -75,13 +73,6 @@ def _resolve_newsdata_key() -> str:
         if isinstance(alt, str) and alt.strip().startswith("pub_"):
             _log.info("fetch_newsdata: using NEWSAPI_KEY as NewsData key fallback (public key detected)")
             return alt.strip()
-        try:
-            from .ui_config import load_ui_config
-
-            ui = load_ui_config()
-            key = str(ui.get("newsdata_key", "") or "").strip()
-        except Exception:
-            key = ""
     return key
 
 

@@ -9,7 +9,6 @@
   "summarizer_concurrency": 2,
   "confirmation_threshold_s": 10.0,
   "auto_confirm_long_actions": false,
-  "newsdata_key": "",
   "speed_mode": false,
   "speed_max_bullets": 6,
   "speed_items_per_section": 12

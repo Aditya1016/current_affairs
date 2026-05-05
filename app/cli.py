@@ -1,5 +1,6 @@
 import shlex
 import re
+import uuid
 from typing import Any, Dict, List, Optional
 
 from rich.console import Console
@@ -998,12 +999,7 @@ def run_cli() -> None:  # noqa: C901
 
         if lower in {"agenda", "today agenda", "what is agenda", "what's agenda"}:
             try:
-                ui_concurrency = int(ui.get("summarizer_concurrency", 2) or 2)
-                _print_digest(
-                    model=session_model,
-                    use_fast_model=bool(ui.get("use_fast_model", False)),
-                    concurrency=ui_concurrency,
-                )
+                _print_digest(model=session_model)
             except Exception as exc:
                 console.print(f"Error: {exc}")
             continue
@@ -1046,7 +1042,6 @@ def run_cli() -> None:  # noqa: C901
                 snapshot_id = _parse_arg(args, "--snapshot", "")
                 model = _parse_arg(args, "--model", session_model)
                 bullets = _parse_int_arg(args, "--bullets", 12)
-                
                 _print_digest(snapshot_id=snapshot_id, model=model, max_bullets=bullets)
             elif cmd == "speed":
                 # speed on|off|status
@@ -1082,9 +1077,9 @@ def run_cli() -> None:  # noqa: C901
                 _show_expected_time("pipeline.total", title="Expected Time")
                 result = _call_with_loader(
                     run_pipeline_service,
-                    
-                        FetchRequest(limit_per_source=limit, include_newsdata=not rss_only),
-                        DigestRequest(model=session_model or None, use_fast_model=bool(ui.get("use_fast_model", False))),
+                    FetchRequest(limit_per_source=limit, include_newsdata=not rss_only),
+                    DigestRequest(model=session_model or None, use_fast_model=bool(ui.get("use_fast_model", False)),
+                                  concurrency=ui_concurrency),
                     phase="pipeline.total",
                     label="Running pipeline",
                     action_name="pipeline execution",
