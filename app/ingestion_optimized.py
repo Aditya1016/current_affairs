@@ -192,7 +192,7 @@ def fetch_rss_threaded(rss_feeds: List[str], limit_per_source: int) -> List[News
 
 
 def fetch_all_news_threaded(
-    limit_per_source: int, include_newsapi: bool, rss_feeds: List[str]
+    limit_per_source: int, include_newsapi: bool, rss_feeds: List[str], include_newsdata: bool = False
 ) -> Tuple[List[NewsItem], Dict[str, int]]:
     """
     Fetch all news using multithreading for concurrent RSS and API requests.
@@ -205,6 +205,7 @@ def fetch_all_news_threaded(
         limit_per_source: items per source
         include_newsapi: whether to fetch from NewsAPI
         rss_feeds: list of RSS feed URLs
+        include_newsdata: whether to fetch from NewsData.io
 
     Returns:
         (items, source_breakdown) tuple
@@ -235,6 +236,16 @@ def fetch_all_news_threaded(
                 _log.error(f"{source_type} fetch failed: {exc}")
                 source_breakdown[source_type] = 0
 
+    if include_newsdata:
+        try:
+            from .ingestion import fetch_newsdata
+            newsdata_items = fetch_newsdata(limit_per_source)
+            items.extend(newsdata_items)
+            source_breakdown["newsdata"] = len(newsdata_items)
+        except Exception as exc:
+            _log.error("newsdata fetch failed: %s", exc)
+            source_breakdown["newsdata"] = 0
+
     return items, source_breakdown
 
 
@@ -243,7 +254,7 @@ def fetch_all_news(
     limit_per_source: int, include_newsapi: bool, rss_feeds: List[str], include_newsdata: bool = False
 ) -> Tuple[List[NewsItem], Dict[str, int]]:
     """Backward compatible wrapper that uses threaded version."""
-    return fetch_all_news_threaded(limit_per_source, include_newsapi, rss_feeds)
+    return fetch_all_news_threaded(limit_per_source, include_newsapi, rss_feeds, include_newsdata)
 
 
 # Optional: Benchmark utility to compare sequential vs threaded
