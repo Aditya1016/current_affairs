@@ -1068,10 +1068,9 @@ def run_cli() -> None:  # noqa: C901
                     ui["use_fast_model"] = False
                     save_ui_config(ui)
                     _box_print(Text("Disabled speed mode. Restored normal digest behavior."), title="Speed Mode")
-                    continue
                 else:
                     _box_print(Text(f"Unknown speed subcommand: {sub}. Usage: speed [status|on|off]"), title="Speed Mode")
-                    continue
+                continue
             elif cmd == "pipeline":
                 limit = _parse_int_arg(args, "--limit", 20)
                 rss_only = "--rss-only" in args
