@@ -374,10 +374,12 @@ def _score_word_token(token: str, doc_freq: int, corpus_freq: int, resolved_diff
 
 
 def _build_proper_noun_set(india_items: List[NewsItem], min_len: int, max_len: int) -> set:
-    """Return tokens that appear only capitalised in the source text (likely proper nouns).
+    """Return tokens that appear exclusively capitalised in the source text (likely proper nouns).
 
-    A token is considered a proper noun if it ever appears with an uppercase first letter
-    in a non-sentence-start position and never appears in fully lowercase form in the text.
+    A token is treated as a proper noun when it appears with an uppercase first letter
+    in every occurrence — it never appears in all-lowercase form anywhere in the titles
+    or snippets.  Regular English words that happen to be sentence-initial will usually
+    also appear lowercase elsewhere in the corpus, so they are not affected.
     """
     appears_capitalised: set = set()
     appears_lowercase: set = set()
