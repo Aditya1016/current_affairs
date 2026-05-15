@@ -984,7 +984,7 @@ def run_cli() -> None:  # noqa: C901
 
         if lower in {"word today", "word", "vocab", "vocab today", "word of the day"}:
             try:
-                result = word_of_day_service(limit_per_source=25, difficulty="balanced", no_repeat_days=14)
+                result = word_of_day_service(limit_per_source=100, difficulty="balanced", no_repeat_days=14)
                 console.print("Word of the day (India current affairs):")
                 console.print(f"- Word: {result.word}")
                 console.print(f"- Context headline: {result.context_headline}")
@@ -1175,7 +1175,7 @@ def run_cli() -> None:  # noqa: C901
                     _show_expected_time("word_of_day.total", title="Expected Time")
                     pack = _call_with_loader(
                         word_pack_service,
-                        limit_per_source=25,
+                        limit_per_source=100,
                         difficulty=level,
                         count=count,
                         no_repeat_days=no_repeat_days,
@@ -1195,7 +1195,7 @@ def run_cli() -> None:  # noqa: C901
                 _show_expected_time("word_of_day.total", title="Expected Time")
                 result = _call_with_loader(
                     word_of_day_service,
-                    limit_per_source=25,
+                    limit_per_source=100,
                     difficulty=level,
                     no_repeat_days=no_repeat_days,
                     phase="word_of_day.total",

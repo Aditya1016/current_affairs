@@ -49,7 +49,6 @@ def _parse_csv_env(name: str, default: List[str]) -> List[str]:
 
 @dataclass(frozen=True)
 class Settings:
-    newsapi_key: str = os.getenv("NEWSAPI_KEY", "")
     newsdata_key: str = os.getenv("NEWSDATA_KEY", "")
     ollama_base_url: str = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
     ollama_model: str = os.getenv("OLLAMA_MODEL", "qwen3.5:9b")

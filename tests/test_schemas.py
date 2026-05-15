@@ -57,7 +57,7 @@ class TestNewsItem:
 class TestFetchRequest:
     def test_defaults(self):
         req = FetchRequest()
-        assert req.limit_per_source == 25
+        assert req.limit_per_source == 100
         assert req.include_newsdata is True
         assert req.rss_feeds is None
 
@@ -72,7 +72,7 @@ class TestFetchRequest:
 
     def test_limit_above_maximum_raises(self):
         with pytest.raises(ValidationError):
-            FetchRequest(limit_per_source=101)  # le=100
+            FetchRequest(limit_per_source=201)  # le=200
 
 
 # ---------------------------------------------------------------------------

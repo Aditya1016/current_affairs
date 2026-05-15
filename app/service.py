@@ -373,6 +373,30 @@ def _score_word_token(token: str, doc_freq: int, corpus_freq: int, resolved_diff
     return rarity_bonus + length_score - corpus_penalty - suffix_penalty
 
 
+def _build_proper_noun_set(india_items: List[NewsItem], min_len: int, max_len: int) -> set:
+    """Return tokens that appear only capitalised in the source text (likely proper nouns).
+
+    A token is considered a proper noun if it ever appears with an uppercase first letter
+    in a non-sentence-start position and never appears in fully lowercase form in the text.
+    """
+    appears_capitalised: set = set()
+    appears_lowercase: set = set()
+    word_pat = re.compile(r"\b[A-Za-z]+\b")
+    for item in india_items:
+        for raw in (item.title, item.snippet or ""):
+            words = word_pat.findall(raw)
+            for idx, w in enumerate(words):
+                lw = w.lower()
+                if len(lw) < min_len or len(lw) > max_len:
+                    continue
+                if w[0].isupper():
+                    appears_capitalised.add(lw)
+                else:
+                    appears_lowercase.add(lw)
+    # Tokens that ONLY appear capitalised are likely proper nouns (persons, places, orgs)
+    return appears_capitalised - appears_lowercase
+
+
 def _collect_word_tokens(
     india_items: List[NewsItem],
     min_len: int,
@@ -415,6 +439,8 @@ def _select_word_candidate(
     max_len = int(profile["max_len"])
     max_freq = int(profile["max_freq"])
     banned = {w.strip().lower() for w in (exclude_words or set()) if w.strip()}
+    # Heuristic: exclude tokens that only appear capitalised (person/place/org names)
+    banned = banned | _build_proper_noun_set(india_items, min_len, max_len)
 
     token_counts, token_global_counts, token_to_headlines = _collect_word_tokens(
         india_items, min_len, max_len, max_freq, banned
@@ -609,7 +635,7 @@ def _generate_quick_definition(word: str, headline: str) -> str:
 
 
 def word_of_day_service(
-    limit_per_source: int = 25,
+    limit_per_source: int = 100,
     difficulty: str = "balanced",
     no_repeat_days: int = 0,
 ) -> WordOfDayResponse:
@@ -664,7 +690,7 @@ def word_of_day_service(
 
 
 def word_pack_service(
-    limit_per_source: int = 25,
+    limit_per_source: int = 100,
     difficulty: str = "balanced",
     count: int = 5,
     no_repeat_days: int = 14,

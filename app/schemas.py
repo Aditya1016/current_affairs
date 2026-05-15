@@ -13,7 +13,7 @@ class NewsItem(BaseModel):
 
 
 class FetchRequest(BaseModel):
-    limit_per_source: int = Field(default=25, ge=5, le=100)
+    limit_per_source: int = Field(default=100, ge=5, le=200)
     include_newsdata: bool = True
     rss_feeds: Optional[List[str]] = None
 
