@@ -529,6 +529,23 @@ def _remember_digest_items(response) -> None:
     _LAST_DIGEST_ITEMS = cached
 
 
+def _add_index_if_valid(idx: int, max_index: int, seen: set, picked: List[int]) -> None:
+    if 1 <= idx <= max_index and idx not in seen:
+        seen.add(idx)
+        picked.append(idx)
+
+
+def _parse_range_token(token: str) -> Optional[tuple[int, int]]:
+    if "-" not in token:
+        return None
+    start_text, end_text = token.split("-", 1)
+    if not (start_text.isdigit() and end_text.isdigit()):
+        return None
+    start = int(start_text)
+    end = int(end_text)
+    return (start, end) if start <= end else (end, start)
+
+
 def _parse_pick_indexes(raw: str, max_index: int) -> List[int]:
     """Parse index/range text like '2', '2,5', '2-4', or '2 from list'."""
     if max_index <= 0:
@@ -544,30 +561,18 @@ def _parse_pick_indexes(raw: str, max_index: int) -> List[int]:
     for token in re.split(r"[\s,]+", cleaned):
         if not token:
             continue
-        if "-" in token:
-            parts = token.split("-", 1)
-            if len(parts) == 2 and parts[0].isdigit() and parts[1].isdigit():
-                start = int(parts[0])
-                end = int(parts[1])
-                if start > end:
-                    start, end = end, start
-                for i in range(start, end + 1):
-                    if 1 <= i <= max_index and i not in seen:
-                        seen.add(i)
-                        picked.append(i)
-                continue
+        parsed_range = _parse_range_token(token)
+        if parsed_range is not None:
+            start, end = parsed_range
+            for i in range(start, end + 1):
+                _add_index_if_valid(i, max_index, seen, picked)
+            continue
         if token.isdigit():
-            idx = int(token)
-            if 1 <= idx <= max_index and idx not in seen:
-                seen.add(idx)
-                picked.append(idx)
+            _add_index_if_valid(int(token), max_index, seen, picked)
 
     if not picked:
         for n in re.findall(r"\d+", cleaned):
-            idx = int(n)
-            if 1 <= idx <= max_index and idx not in seen:
-                seen.add(idx)
-                picked.append(idx)
+            _add_index_if_valid(int(n), max_index, seen, picked)
 
     return picked
 
@@ -1020,7 +1025,8 @@ def run_cli() -> None:  # noqa: C901
                 if bg:
                     fetch_req = FetchRequest(limit_per_source=limit, include_newsdata=include_newsdata_val)
                     tid = _start_bg_fetch(fetch_req, ui)
-                    _box_print(f"Started background fetch (task id: {tid}). Use 'bg status' to view.", title="Background Fetch")
+                    msg = f"Started background fetch (task id: {tid}). Use 'bg status' to view."
+                    _box_print(msg, title="Background Fetch")
                     continue
 
                 response = _call_with_loader(
@@ -1048,7 +1054,13 @@ def run_cli() -> None:  # noqa: C901
                 if sub == "status":
                     ui = load_ui_config()
                     mode = "ON" if ui.get("speed_mode") else "OFF"
-                    _box_print(Text(f"Speed mode: {mode}\nUse fast model: {ui.get('use_fast_model', False)}\nFast model: {ui.get('fast_model_name', '')}\nMax bullets: {ui.get('speed_max_bullets', 6)}"), title="Speed Mode")
+                    details = (
+                        f"Speed mode: {mode}\n"
+                        f"Use fast model: {ui.get('use_fast_model', False)}\n"
+                        f"Fast model: {ui.get('fast_model_name', '')}\n"
+                        f"Max bullets: {ui.get('speed_max_bullets', 6)}"
+                    )
+                    _box_print(Text(details), title="Speed Mode")
                     continue
                 if sub in {"on", "enable", "true"}:
                     ui = load_ui_config()

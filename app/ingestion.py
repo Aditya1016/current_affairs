@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 from urllib.parse import urlparse, urlunparse
 
 try:
@@ -28,6 +28,7 @@ def _mask_params(params: dict) -> dict:
         else:
             out[k] = v
     return out
+
 
 REQUEST_HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
@@ -74,6 +75,59 @@ def _is_public_newsdata_key(key: str) -> bool:
     return isinstance(key, str) and key.strip().startswith("pub_")
 
 
+def _fetch_newsdata_payload(url: str, params: dict, next_page: Optional[str]) -> Optional[dict]:
+    try:
+        _log.info("fetch_newsdata: requesting %s params=%s", url, _mask_params(params))
+        resp = requests.get(url, params=params, timeout=20)
+        _log.info("fetch_newsdata: response status=%s", resp.status_code)
+        resp.raise_for_status()
+        payload = resp.json()
+    except Exception:
+        _log.exception("fetch_newsdata: request failed on page=%s, returning collected items", next_page)
+        return None
+    _log.debug("fetch_newsdata: payload keys=%s", list(payload.keys()) if isinstance(payload, dict) else type(payload))
+    return payload if isinstance(payload, dict) else None
+
+
+def _build_newsdata_item(article: dict, seen_urls: set) -> Optional[NewsItem]:
+    title = _safe_text(article.get("title", ""))
+    if not title:
+        return None
+    source = _safe_text(article.get("source_id", "NewsData"))
+    link = _normalize_url(article.get("link", "") or article.get("url", ""))
+    if not link or link in seen_urls:
+        return None
+    seen_urls.add(link)
+    snippet = _safe_text(article.get("description") or article.get("content") or "")
+    published_at = _parse_dt(article.get("pubDate", "") or article.get("pubDateYMD", ""))
+    category = _category_from_text(title, source)
+    return NewsItem(
+        title=title,
+        source=source,
+        url=link,
+        snippet=snippet,
+        published_at=published_at,
+        category=category,
+    )
+
+
+def _append_newsdata_results(
+    payload: dict, all_items: List[NewsItem], seen_urls: set, limit_per_source: int
+) -> Optional[str]:
+    results = payload.get("results", [])
+    if not isinstance(results, list) or not results:
+        return None
+
+    for article in results:
+        if len(all_items) >= limit_per_source:
+            break
+        item = _build_newsdata_item(article, seen_urls)
+        if item is not None:
+            all_items.append(item)
+
+    return payload.get("nextPage")
+
+
 def fetch_newsdata(limit_per_source: int) -> List[NewsItem]:
     """Fetch articles from NewsData.io (https://newsdata.io).
     Uses NEWSDATA_KEY from env or UI config.
@@ -96,60 +150,18 @@ def fetch_newsdata(limit_per_source: int) -> List[NewsItem]:
     next_page = None
     max_pages = 10
 
-    try:
-        for _ in range(max_pages):
-            if len(all_items) >= limit_per_source:
-                break
+    for _ in range(max_pages):
+        if len(all_items) >= limit_per_source:
+            break
 
-            params = dict(base_params)
-            if next_page:
-                params["page"] = next_page
+        params = {**base_params, **({"page": next_page} if next_page else {})}
+        payload = _fetch_newsdata_payload(url, params, next_page)
+        if payload is None:
+            break
 
-            try:
-                _log.info("fetch_newsdata: requesting %s params=%s", url, _mask_params(params))
-                resp = requests.get(url, params=params, timeout=20)
-                _log.info("fetch_newsdata: response status=%s", resp.status_code)
-                resp.raise_for_status()
-                payload = resp.json()
-            except Exception:
-                _log.exception("fetch_newsdata: request failed on page=%s, returning collected items", next_page)
-                break
-            _log.debug("fetch_newsdata: payload keys=%s", list(payload.keys()) if isinstance(payload, dict) else type(payload))
-
-            results = payload.get("results", [])
-            if not isinstance(results, list) or not results:
-                break
-
-            for article in results:
-                if len(all_items) >= limit_per_source:
-                    break
-                title = _safe_text(article.get("title", ""))
-                if not title:
-                    continue
-                source = _safe_text(article.get("source_id", "NewsData"))
-                link = _normalize_url(article.get("link", "") or article.get("url", ""))
-                if not link or link in seen_urls:
-                    continue
-                seen_urls.add(link)
-                snippet = _safe_text(article.get("description") or article.get("content") or "")
-                published_at = _parse_dt(article.get("pubDate", "") or article.get("pubDateYMD", ""))
-                category = _category_from_text(title, source)
-                all_items.append(
-                    NewsItem(
-                        title=title,
-                        source=source,
-                        url=link,
-                        snippet=snippet,
-                        published_at=published_at,
-                        category=category,
-                    )
-                )
-
-            next_page = payload.get("nextPage")
-            if not next_page:
-                break
-    except Exception:
-        _log.exception("fetch_newsdata: unexpected error, returning collected items")
+        next_page = _append_newsdata_results(payload, all_items, seen_urls, limit_per_source)
+        if not next_page:
+            break
 
     return all_items
 
@@ -205,7 +217,9 @@ def fetch_rss(rss_feeds: List[str], limit_per_source: int) -> List[NewsItem]:
     return all_items
 
 
-def fetch_all_news(limit_per_source: int, rss_feeds: List[str], include_newsdata: bool = True) -> Tuple[List[NewsItem], Dict[str, int]]:
+def fetch_all_news(
+    limit_per_source: int, rss_feeds: List[str], include_newsdata: bool = True
+) -> Tuple[List[NewsItem], Dict[str, int]]:
     """Fetch news from NewsData (optional) and RSS feeds.
 
     Returns (items, source_breakdown).
