@@ -41,3 +41,21 @@ def test_build_phase_table(monkeypatch):
     assert "other.phase" not in rendered
     # Also confirm exactly 2 data columns
     assert len(table.columns) == 2
+
+
+def test_parse_pick_indexes_basic():
+    pytest.importorskip("rich")
+    import app.cli as cli
+
+    assert cli._parse_pick_indexes("2", 12) == [2]
+    assert cli._parse_pick_indexes("2,5", 12) == [2, 5]
+    assert cli._parse_pick_indexes("2-4", 12) == [2, 3, 4]
+
+
+def test_parse_pick_indexes_freeform_and_bounds():
+    pytest.importorskip("rich")
+    import app.cli as cli
+
+    assert cli._parse_pick_indexes("2 from list", 12) == [2]
+    assert cli._parse_pick_indexes("99", 12) == []
+    assert cli._parse_pick_indexes("4-2", 12) == [2, 3, 4]

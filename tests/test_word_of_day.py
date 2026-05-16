@@ -7,6 +7,7 @@ from app.service import (
     _generate_quick_definition,
     _normalize_word_difficulty,
     _select_word_candidate,
+    _build_proper_noun_set,
     _parse_iso_dt,
     _filter_today_india_items,
 )
@@ -69,6 +70,47 @@ class TestWordCandidateSelection:
         ]
         word, _headline, _note = _select_word_candidate(items, difficulty="balanced", exclude_words={"interdiction"})
         assert word != "interdiction"
+
+    def test_excludes_person_names(self):
+        """Words that appear only capitalised (e.g. person names) must not be picked."""
+        items = [
+            _item(
+                "Chandrashekhar Azad wins election amid procurement tangle",
+                "Chandrashekhar spoke at the rally about judicial review",
+            ),
+            _item(
+                "Parliament debates electoral procurement reforms",
+                "Electoral reforms and judicial scrutiny dominate session",
+            ),
+        ]
+        word, _headline, _note = _select_word_candidate(items, difficulty="balanced")
+        assert word != "chandrashekhar"
+        assert word != "azad"
+
+
+class TestProperNounSet:
+    def test_detects_capitalised_only_token(self):
+        items = [
+            _item("Chandrashekhar wins Bihar election", "Chandrashekhar is popular"),
+        ]
+        proper = _build_proper_noun_set(items, min_len=5, max_len=16)
+        assert "chandrashekhar" in proper
+
+    def test_does_not_flag_lowercase_token(self):
+        items = [
+            _item("Harvest caught in tangle", "the harvest was plentiful"),
+        ]
+        proper = _build_proper_noun_set(items, min_len=5, max_len=16)
+        assert "harvest" not in proper
+
+    def test_does_not_flag_mixed_case_token(self):
+        """If a word appears both capitalized AND lowercase, it is not a proper noun."""
+        items = [
+            _item("India leads economic reform", "india has a growing economy"),
+        ]
+        proper = _build_proper_noun_set(items, min_len=5, max_len=16)
+        # 'india' appears both capitalised (title) and lowercase (snippet)
+        assert "india" not in proper
 
 
 class TestDifficultyNormalization:

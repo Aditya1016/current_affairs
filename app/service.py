@@ -156,8 +156,7 @@ def fetch_news_service(request: FetchRequest) -> FetchResponse:
     sources_start = perf_counter()
     items, source_breakdown = fetch_all_news(
         limit_per_source=request.limit_per_source,
-        include_newsapi=request.include_newsapi,
-        include_newsdata=getattr(request, "include_newsdata", False),
+        include_newsdata=getattr(request, "include_newsdata", True),
         rss_feeds=feeds,
     )
     storage.save_phase_metric(
@@ -165,7 +164,7 @@ def fetch_news_service(request: FetchRequest) -> FetchResponse:
         duration_ms=_elapsed_ms(sources_start),
         meta={
             "limit_per_source": request.limit_per_source,
-            "include_newsapi": request.include_newsapi,
+            "include_newsdata": getattr(request, "include_newsdata", True),
             "rss_feed_count": len(feeds),
         },
     )
@@ -176,7 +175,7 @@ def fetch_news_service(request: FetchRequest) -> FetchResponse:
             duration_ms=_elapsed_ms(fetch_total_start),
             meta={"total_fetched": 0},
         )
-        raise RuntimeError("No news items fetched. Check NEWSAPI key and RSS feed availability.")
+        raise RuntimeError("No news items fetched. Check NEWSDATA key and RSS feed availability.")
 
     snapshot_payload = {
         "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -374,6 +373,32 @@ def _score_word_token(token: str, doc_freq: int, corpus_freq: int, resolved_diff
     return rarity_bonus + length_score - corpus_penalty - suffix_penalty
 
 
+def _build_proper_noun_set(india_items: List[NewsItem], min_len: int, max_len: int) -> set:
+    """Return tokens that appear exclusively capitalised in the source text (likely proper nouns).
+
+    A token is treated as a proper noun when it appears with an uppercase first letter
+    in every occurrence — it never appears in all-lowercase form anywhere in the titles
+    or snippets.  Regular English words that happen to be sentence-initial will usually
+    also appear lowercase elsewhere in the corpus, so they are not affected.
+    """
+    appears_capitalised: set = set()
+    appears_lowercase: set = set()
+    word_pat = re.compile(r"\b[A-Za-z]+\b")
+    for item in india_items:
+        for raw in (item.title, item.snippet or ""):
+            words = word_pat.findall(raw)
+            for idx, w in enumerate(words):
+                lw = w.lower()
+                if len(lw) < min_len or len(lw) > max_len:
+                    continue
+                if w[0].isupper():
+                    appears_capitalised.add(lw)
+                else:
+                    appears_lowercase.add(lw)
+    # Tokens that ONLY appear capitalised are likely proper nouns (persons, places, orgs)
+    return appears_capitalised - appears_lowercase
+
+
 def _collect_word_tokens(
     india_items: List[NewsItem],
     min_len: int,
@@ -416,6 +441,8 @@ def _select_word_candidate(
     max_len = int(profile["max_len"])
     max_freq = int(profile["max_freq"])
     banned = {w.strip().lower() for w in (exclude_words or set()) if w.strip()}
+    # Heuristic: exclude tokens that only appear capitalised (person/place/org names)
+    banned = banned | _build_proper_noun_set(india_items, min_len, max_len)
 
     token_counts, token_global_counts, token_to_headlines = _collect_word_tokens(
         india_items, min_len, max_len, max_freq, banned
@@ -610,7 +637,7 @@ def _generate_quick_definition(word: str, headline: str) -> str:
 
 
 def word_of_day_service(
-    limit_per_source: int = 25,
+    limit_per_source: int = 100,
     difficulty: str = "balanced",
     no_repeat_days: int = 0,
 ) -> WordOfDayResponse:
@@ -620,7 +647,7 @@ def word_of_day_service(
     fetch_result = fetch_news_service(
         FetchRequest(
             limit_per_source=limit_per_source,
-            include_newsapi=bool(settings.newsapi_key),
+            include_newsdata=True,
         )
     )
     snapshot_data = storage.load_raw(fetch_result.snapshot_id)
@@ -665,7 +692,7 @@ def word_of_day_service(
 
 
 def word_pack_service(
-    limit_per_source: int = 25,
+    limit_per_source: int = 100,
     difficulty: str = "balanced",
     count: int = 5,
     no_repeat_days: int = 14,
@@ -677,7 +704,7 @@ def word_pack_service(
     fetch_result = fetch_news_service(
         FetchRequest(
             limit_per_source=limit_per_source,
-            include_newsapi=bool(settings.newsapi_key),
+            include_newsdata=True,
         )
     )
     snapshot_data = storage.load_raw(fetch_result.snapshot_id)
@@ -722,7 +749,7 @@ def generate_today_india_digest_service(limit_per_source: int = 20, model: str =
     fetch_result = fetch_news_service(
         FetchRequest(
             limit_per_source=limit_per_source,
-            include_newsapi=bool(settings.newsapi_key),
+            include_newsdata=True,
         )
     )
 

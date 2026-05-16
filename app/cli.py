@@ -1,6 +1,7 @@
 import shlex
+import re
 import uuid
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from rich.console import Console
 from rich.panel import Panel
@@ -41,7 +42,7 @@ HELP_TEXT = """
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   🔄 CORE COMMANDS
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  fetch                             Fetch headlines from RSS + NewsAPI
+    fetch                             Fetch headlines from RSS + NewsData
   pipeline                          Fetch + generate digest (in one step)
   help                              Show this help
   exit                              Quit CLI
@@ -64,6 +65,7 @@ HELP_TEXT = """
   🔍 SEARCH & ANALYSIS
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   search <QUERY>                    Search indexed stories
+    pick <N|N,M|N-M>                  Open digest bullet(s) by number and find related headlines
   trending                          Trending topics (all categories)
   trending-india                    Trending topics in India news
   trending-world                    Trending topics in World news
@@ -74,6 +76,9 @@ HELP_TEXT = """
 
   Usage:
     search "politics india" [--limit 20] [--category india] [--days 7]
+        pick 2
+        pick 2,5
+        pick 2-4
     trending [--days 7] [--limit 10]
     trending-india [--days 7]
     graph [--snapshot ID] [--top 15]
@@ -116,6 +121,7 @@ console = Console()
 # Thread pool for running blocking operations so the UI can remain responsive
 _CLI_EXECUTOR = ThreadPoolExecutor(max_workers=4)
 _BG_TASKS: Dict[str, Dict[str, Any]] = {}
+_LAST_DIGEST_ITEMS: List[Dict[str, str]] = []
 
 
 def _get_phase_avg_ms(phase: str) -> float:
@@ -498,14 +504,96 @@ def _parse_int_arg(args: List[str], name: str, default: int) -> int:
         return default
 
 
-def _print_digest(
-    snapshot_id: str = "", model: str = "", max_bullets: int = 12,
-    use_fast_model: bool = False, concurrency: Optional[int] = None
-) -> None:
+def _remember_digest_items(response) -> None:
+    """Cache digest bullet items so user can select them by index later."""
+    global _LAST_DIGEST_ITEMS
+    cached: List[Dict[str, str]] = []
+
+    for p in getattr(response, "india_points", []):
+        cached.append(
+            {
+                "section": "india",
+                "point": str(getattr(p, "point", "")),
+                "sources": ", ".join(getattr(p, "sources", []) or []),
+            }
+        )
+    for p in getattr(response, "world_points", []):
+        cached.append(
+            {
+                "section": "world",
+                "point": str(getattr(p, "point", "")),
+                "sources": ", ".join(getattr(p, "sources", []) or []),
+            }
+        )
+
+    _LAST_DIGEST_ITEMS = cached
+
+
+def _add_index_if_valid(idx: int, max_index: int, seen: set, picked: List[int]) -> None:
+    if 1 <= idx <= max_index and idx not in seen:
+        seen.add(idx)
+        picked.append(idx)
+
+
+def _parse_range_token(token: str) -> Optional[Tuple[int, int]]:
+    if "-" not in token:
+        return None
+    start_text, end_text = token.split("-", 1)
+    if not (start_text.isdigit() and end_text.isdigit()):
+        return None
+    start = int(start_text)
+    end = int(end_text)
+    return (start, end) if start <= end else (end, start)
+
+
+def _parse_pick_indexes(raw: str, max_index: int) -> List[int]:
+    """Parse index/range text like '2', '2,5', '2-4', or '2 from list'."""
+    if max_index <= 0:
+        return []
+
+    cleaned = (raw or "").strip().lower()
+    if not cleaned:
+        return []
+
+    picked: List[int] = []
+    seen = set()
+
+    for token in re.split(r"[\s,]+", cleaned):
+        if not token:
+            continue
+        parsed_range = _parse_range_token(token)
+        if parsed_range is not None:
+            start, end = parsed_range
+            for i in range(start, end + 1):
+                _add_index_if_valid(i, max_index, seen, picked)
+            continue
+        if token.isdigit():
+            _add_index_if_valid(int(token), max_index, seen, picked)
+
+    if not picked:
+        for n in re.findall(r"\d+", cleaned):
+            _add_index_if_valid(int(n), max_index, seen, picked)
+
+    return picked
+
+
+def _print_digest(snapshot_id: str = "", model: str = "", max_bullets: int = 12):
+    ui = load_ui_config()
+    # If speed_mode is enabled, prefer fast model and tighter bullet limits
+    speed_mode = bool(ui.get("speed_mode", False))
+    if speed_mode:
+        max_bullets = min(max_bullets, int(ui.get("speed_max_bullets", 6)))
+
+    # concurrency for summarizer workers (optional)
+    try:
+        concurrency = int(ui.get("summarizer_concurrency", settings.summarizer_concurrency) or settings.summarizer_concurrency)
+    except Exception:
+        concurrency = settings.summarizer_concurrency
+
     request = DigestRequest(
         snapshot_id=snapshot_id or None,
         model=model or None,
-        use_fast_model=use_fast_model,
+        use_fast_model=bool(ui.get("use_fast_model", False)) or speed_mode,
         max_bullets=max_bullets,
         concurrency=concurrency,
     )
@@ -519,8 +607,10 @@ def _print_digest(
         action_name="digest generation",
     )
     if response is None:
-        return
+        return None
+    _remember_digest_items(response)
     console.print(format_digest_text(response))
+    return response
 
 
 def _render_graph_summary(result: dict) -> None:
@@ -890,6 +980,7 @@ def run_cli() -> None:  # noqa: C901
                 )
                 if digest is None:
                     continue
+                _remember_digest_items(digest)
                 _box_print("Generated fresh India-only digest for today.", title="Info")
                 _box_print(format_india_digest_text(digest), title="Today's Digest")
             except Exception as exc:
@@ -898,7 +989,7 @@ def run_cli() -> None:  # noqa: C901
 
         if lower in {"word today", "word", "vocab", "vocab today", "word of the day"}:
             try:
-                result = word_of_day_service(limit_per_source=25, difficulty="balanced", no_repeat_days=14)
+                result = word_of_day_service(limit_per_source=100, difficulty="balanced", no_repeat_days=14)
                 console.print("Word of the day (India current affairs):")
                 console.print(f"- Word: {result.word}")
                 console.print(f"- Context headline: {result.context_headline}")
@@ -912,12 +1003,7 @@ def run_cli() -> None:  # noqa: C901
 
         if lower in {"agenda", "today agenda", "what is agenda", "what's agenda"}:
             try:
-                ui_concurrency = int(ui.get("summarizer_concurrency", 2) or 2)
-                _print_digest(
-                    model=session_model,
-                    use_fast_model=bool(ui.get("use_fast_model", False)),
-                    concurrency=ui_concurrency,
-                )
+                _print_digest(model=session_model)
             except Exception as exc:
                 console.print(f"Error: {exc}")
             continue
@@ -931,27 +1017,21 @@ def run_cli() -> None:  # noqa: C901
                 limit = _parse_int_arg(args, "--limit", 20)
                 rss_only = "--rss-only" in args
                 bg = "--bg" in args
-                include_newsdata = "--newsdata" in args
+                include_newsdata_flag = "--newsdata" in args
                 _show_expected_time("fetch.total", title="Expected Time")
+
+                include_newsdata_val = bool(include_newsdata_flag or (not rss_only))
+
                 if bg:
-                    fetch_req = FetchRequest(
-                        limit_per_source=limit,
-                        include_newsapi=not rss_only,
-                        include_newsdata=include_newsdata,
-                    )
+                    fetch_req = FetchRequest(limit_per_source=limit, include_newsdata=include_newsdata_val)
                     tid = _start_bg_fetch(fetch_req, ui)
-                    _box_print(
-                        f"Started background fetch (task id: {tid}). Use 'bg status' to view.",
-                        title="Background Fetch",
-                    )
+                    msg = f"Started background fetch (task id: {tid}). Use 'bg status' to view."
+                    _box_print(msg, title="Background Fetch")
                     continue
+
                 response = _call_with_loader(
                     fetch_news_service,
-                    FetchRequest(
-                        limit_per_source=limit,
-                        include_newsapi=not rss_only,
-                        include_newsdata=include_newsdata,
-                    ),
+                    FetchRequest(limit_per_source=limit, include_newsdata=include_newsdata_val),
                     phase="fetch.total",
                     label="Fetching news",
                     action_name="news fetch",
@@ -967,14 +1047,42 @@ def run_cli() -> None:  # noqa: C901
                 snapshot_id = _parse_arg(args, "--snapshot", "")
                 model = _parse_arg(args, "--model", session_model)
                 bullets = _parse_int_arg(args, "--bullets", 12)
-                ui_concurrency = int(ui.get("summarizer_concurrency", 2) or 2)
-                _print_digest(
-                    snapshot_id=snapshot_id,
-                    model=model,
-                    max_bullets=bullets,
-                    use_fast_model=bool(ui.get("use_fast_model", False)),
-                    concurrency=ui_concurrency,
-                )
+                _print_digest(snapshot_id=snapshot_id, model=model, max_bullets=bullets)
+            elif cmd == "speed":
+                # speed on|off|status
+                sub = args[0].lower() if args else "status"
+                if sub == "status":
+                    ui = load_ui_config()
+                    mode = "ON" if ui.get("speed_mode") else "OFF"
+                    details = (
+                        f"Speed mode: {mode}\n"
+                        f"Use fast model: {ui.get('use_fast_model', False)}\n"
+                        f"Fast model: {ui.get('fast_model_name', '')}\n"
+                        f"Max bullets: {ui.get('speed_max_bullets', 6)}"
+                    )
+                    _box_print(Text(details), title="Speed Mode")
+                    continue
+                if sub in {"on", "enable", "true"}:
+                    ui = load_ui_config()
+                    ui["speed_mode"] = True
+                    ui["use_fast_model"] = True
+                    if not ui.get("fast_model_name"):
+                        ui["fast_model_name"] = settings.fast_ollama_model
+                    # sensible defaults for speed mode
+                    ui["speed_max_bullets"] = int(ui.get("speed_max_bullets", 6))
+                    ui["speed_items_per_section"] = int(ui.get("speed_items_per_section", 12))
+                    save_ui_config(ui)
+                    _box_print(Text("Enabled speed mode. Fast model will be used for digests."), title="Speed Mode")
+                    continue
+                if sub in {"off", "disable", "false"}:
+                    ui = load_ui_config()
+                    ui["speed_mode"] = False
+                    ui["use_fast_model"] = False
+                    save_ui_config(ui)
+                    _box_print(Text("Disabled speed mode. Restored normal digest behavior."), title="Speed Mode")
+                else:
+                    _box_print(Text(f"Unknown speed subcommand: {sub}. Usage: speed [status|on|off]"), title="Speed Mode")
+                continue
             elif cmd == "pipeline":
                 limit = _parse_int_arg(args, "--limit", 20)
                 rss_only = "--rss-only" in args
@@ -982,12 +1090,9 @@ def run_cli() -> None:  # noqa: C901
                 _show_expected_time("pipeline.total", title="Expected Time")
                 result = _call_with_loader(
                     run_pipeline_service,
-                    FetchRequest(limit_per_source=limit, include_newsapi=not rss_only),
-                    DigestRequest(
-                        model=session_model or None,
-                        use_fast_model=bool(ui.get("use_fast_model", False)),
-                        concurrency=ui_concurrency,
-                    ),
+                    FetchRequest(limit_per_source=limit, include_newsdata=not rss_only),
+                    DigestRequest(model=session_model or None, use_fast_model=bool(ui.get("use_fast_model", False)),
+                                  concurrency=ui_concurrency),
                     phase="pipeline.total",
                     label="Running pipeline",
                     action_name="pipeline execution",
@@ -998,7 +1103,41 @@ def run_cli() -> None:  # noqa: C901
                 txt.append(f"Fetched {result.fetch.total_fetched} items.\n", style="bold")
                 txt.append(f"Snapshot: {result.fetch.snapshot_id}\n", style="dim")
                 _box_print(txt, title="Pipeline Result")
+                _remember_digest_items(result.digest)
                 _box_print(format_digest_text(result.digest), title="Digest")
+            elif cmd in {"pick", "open"}:
+                if not _LAST_DIGEST_ITEMS:
+                    console.print("No digest list in memory yet. Run 'news today', 'digest', 'agenda', or 'pipeline' first.")
+                    continue
+                if not args:
+                    console.print("Usage: pick <N|N,M|N-M>  (example: pick 2 or pick 2,5)")
+                    continue
+
+                picks = _parse_pick_indexes(" ".join(args), len(_LAST_DIGEST_ITEMS))
+                if not picks:
+                    console.print(f"No valid pick indexes. Choose values between 1 and {len(_LAST_DIGEST_ITEMS)}.")
+                    continue
+
+                for idx in picks:
+                    item = _LAST_DIGEST_ITEMS[idx - 1]
+                    point = str(item.get("point", "")).strip()
+                    section = str(item.get("section", "world") or "world")
+                    src = str(item.get("sources", ""))
+
+                    txt = Text()
+                    txt.append(f"#{idx} ({section.upper()})\n", style="bold cyan")
+                    txt.append(f"{point}\n", style="bold")
+                    if src:
+                        txt.append(f"Digest sources: {src}\n", style="dim")
+                    _box_print(txt, title="Selected Digest Bullet")
+
+                    related = search_stories_service(
+                        query=point,
+                        limit=5,
+                        category=section,
+                        days=30,
+                    )
+                    _render_story_search(related.dict())
             elif cmd == "search":
                 query = ""
                 if args and not args[0].startswith("--"):
@@ -1048,7 +1187,7 @@ def run_cli() -> None:  # noqa: C901
                     _show_expected_time("word_of_day.total", title="Expected Time")
                     pack = _call_with_loader(
                         word_pack_service,
-                        limit_per_source=25,
+                        limit_per_source=100,
                         difficulty=level,
                         count=count,
                         no_repeat_days=no_repeat_days,
@@ -1068,7 +1207,7 @@ def run_cli() -> None:  # noqa: C901
                 _show_expected_time("word_of_day.total", title="Expected Time")
                 result = _call_with_loader(
                     word_of_day_service,
-                    limit_per_source=25,
+                    limit_per_source=100,
                     difficulty=level,
                     no_repeat_days=no_repeat_days,
                     phase="word_of_day.total",
