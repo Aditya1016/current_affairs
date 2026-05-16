@@ -1,7 +1,7 @@
 import shlex
 import re
 import uuid
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from rich.console import Console
 from rich.panel import Panel
@@ -535,7 +535,7 @@ def _add_index_if_valid(idx: int, max_index: int, seen: set, picked: List[int]) 
         picked.append(idx)
 
 
-def _parse_range_token(token: str) -> Optional[tuple[int, int]]:
+def _parse_range_token(token: str) -> Optional[Tuple[int, int]]:
     if "-" not in token:
         return None
     start_text, end_text = token.split("-", 1)
